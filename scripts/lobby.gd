@@ -1,63 +1,97 @@
 extends Control
-## Lobby: cada dispositivo carrega no botão de pegar para entrar (até 4).
-## Online, os jogadores de todos os PCs aparecem aqui e só o anfitrião começa.
+## Lobby: cada dispositivo carrega no botão de pegar para entrar (até 4) e
+## escolhe o personagem com esquerda/direita. Online, os jogadores de todos os
+## PCs aparecem aqui e só o anfitrião começa.
 
-var _slots: Array[Dictionary] = []
+const SLOT_SIZE := Vector2(270, 410)
+
+var _slots: Array[LobbySlot] = []
 var _pads_label: Label
 var _room_label: Label
+## Último valor de move.x de cada fonte, para detetar o toque em esquerda/direita.
+var _last_x := {}
 
 
 func _ready() -> void:
+	theme = UiStyle.theme()
 	UiStyle.background(self)
 	var root := VBoxContainer.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_theme_constant_override("separation", 12)
+	root.add_theme_constant_override("separation", 14)
 	add_child(root)
 
 	var top := Control.new()
-	top.custom_minimum_size.y = 8
+	top.custom_minimum_size.y = 18
 	root.add_child(top)
 	root.add_child(UiStyle.label(
-		"Tutorial: quem vai aprender?" if GameState.mode == GameState.Mode.TUTORIAL else "Quem vai cozinhar?", 24))
+		"Tutorial: quem vai aprender?" if GameState.mode == GameState.Mode.TUTORIAL else "Quem vai cozinhar?", 52, UiStyle.TEXT, 10))
 
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", 22)
 	root.add_child(row)
 	for i in PlayerRegistry.MAX_PLAYERS:
-		row.add_child(_make_slot(i))
+		var slot := LobbySlot.new()
+		slot.index = i
+		slot.custom_minimum_size = SLOT_SIZE
+		row.add_child(slot)
+		_slots.append(slot)
 
-	root.add_child(UiStyle.label(
-		"Entrar: Espaço / Enter / Cruz   ·   Sair: Shift / - / Círculo\nComeçar: Esc / Backspace / Options (sem ninguém, volta ao menu)", 11, UiStyle.MUTED))
-	_pads_label = UiStyle.label("", 10, UiStyle.MUTED)
+	var help := PanelContainer.new()
+	help.add_theme_stylebox_override("panel", UiStyle.paper_box())
+	help.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var help_label := UiStyle.label(
+		"Entrar: Espaço / Enter / Cruz      Trocar de chef: esquerda / direita\n" +
+		"Sair: Shift / - / Círculo      Começar: Esc / Backspace / Options (sem ninguém, volta ao menu)", 20, UiStyle.INK)
+	help.add_child(help_label)
+	root.add_child(help)
+	_pads_label = UiStyle.label("", 18, UiStyle.MUTED, 6)
 	root.add_child(_pads_label)
-	_room_label = UiStyle.label(_room_text(), 10, Color("f2c94c"))
+	_room_label = UiStyle.label(_room_text(), 22, UiStyle.GOLD, 6)
 	root.add_child(_room_label)
 
 	# Primeira leitura sem efeito, para a tecla que abriu o lobby não contar como "entrar".
 	for source in DeviceManager.all_sources():
 		source.poll()
+		_last_x[source] = source.move.x
 	PlayerRegistry.players_changed.connect(_refresh)
 	DeviceManager.sources_changed.connect(_refresh)
 	_refresh()
+	Sfx.music_on()
 
 
 func _process(_delta: float) -> void:
 	for source in DeviceManager.all_sources():
 		source.poll()
 		var joined := PlayerRegistry.has_source(source)
+		var x := source.move.x
+		var last: float = _last_x.get(source, 0.0)
+		_last_x[source] = x
+		if joined and absf(x) > 0.5 and absf(last) <= 0.5:
+			var dir := 1 if x > 0.0 else -1
+			PlayerRegistry.cycle_character(source, dir)
+			for slot in _slots:
+				var p := PlayerRegistry.get_player(slot.index)
+				if p and p["source"] == source:
+					slot.bump(dir)
+			Sfx.play("ui_move")
 		if not joined and source.just_pressed(&"pick"):
 			PlayerRegistry.join(source)
+			Sfx.play("ui_confirm")
 		elif joined and source.just_pressed(&"dash"):
 			PlayerRegistry.leave(source)
+			Sfx.play("ui_back")
 		elif source.just_pressed(&"pause"):
 			if PlayerRegistry.players.is_empty() or (Net.is_client() and not joined):
 				Net.leave()
-				get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+				Sfx.play("ui_back")
+				Transition.go("res://scenes/main_menu.tscn")
 			elif Net.online and Net.is_host():
+				Sfx.play("ui_confirm")
 				Net.start_level.rpc()
 			elif not Net.online:
-				get_tree().change_scene_to_file("res://scenes/level.tscn")
+				Sfx.play("ui_confirm")
+				Transition.go("res://scenes/level.tscn")
 			return
 
 
@@ -69,43 +103,8 @@ func _room_text() -> String:
 	return "Ligado à sala. Só o anfitrião pode começar."
 
 
-func _make_slot(i: int) -> Control:
-	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(140, 150)
-	var style := StyleBoxFlat.new()
-	style.bg_color = UiStyle.PANEL
-	style.set_corner_radius_all(4)
-	style.set_border_width_all(2)
-	panel.add_theme_stylebox_override("panel", style)
-
-	var box := VBoxContainer.new()
-	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	panel.add_child(box)
-	box.add_child(UiStyle.label("P%d" % (i + 1), 20))
-	var swatch := ColorRect.new()
-	swatch.custom_minimum_size = Vector2(32, 32)
-	swatch.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	box.add_child(swatch)
-	var device := UiStyle.label("", 10)
-	device.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(device)
-
-	_slots.append({"style": style, "swatch": swatch, "device": device})
-	return panel
-
-
 func _refresh() -> void:
-	for i in _slots.size():
-		var slot := _slots[i]
-		var player := PlayerRegistry.get_player(i)
-		if player:
-			var source: InputSource = player["source"]
-			slot["swatch"].color = player["color"]
-			slot["style"].border_color = player["color"]
-			slot["device"].text = source.get_label() + ("" if source.is_available() else "\n(desligado)")
-		else:
-			slot["swatch"].color = UiStyle.BG
-			slot["style"].border_color = UiStyle.PANEL
-			slot["device"].text = "À espera..."
+	for slot in _slots:
+		slot.set_player(PlayerRegistry.get_player(slot.index))
 	var pads := DeviceManager.connected_pad_names()
 	_pads_label.text = "Comandos ligados: " + (", ".join(pads) if pads else "nenhum")

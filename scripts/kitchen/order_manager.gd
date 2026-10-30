@@ -97,4 +97,4 @@ func _refresh_orders() -> void:
 	for customer in customers:
 		if customer.is_waiting():
 			orders.append({"recipe": customer.recipe, "time_left": customer.patience,
-				"max_time": customer.max_patience, "table": customer.table.number})
+				"max_time": customer.max_patience, "table": customer.table.number, "id": customer.id})

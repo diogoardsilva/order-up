@@ -7,7 +7,7 @@ signal players_changed
 const MAX_PLAYERS := 4
 const COLORS: Array[Color] = [Color("e8574d"), Color("4d9be8"), Color("f2c94c"), Color("6fcf6a")]
 
-## Cada entrada: {"slot", "source", "color", "peer", "source_id", "label"}
+## Cada entrada: {"slot", "source", "color", "peer", "source_id", "label", "character"}
 var players: Array[Dictionary] = []
 
 
@@ -23,6 +23,21 @@ func leave(source: InputSource) -> void:
 		_request_leave.rpc_id(1, source.get_id())
 	else:
 		_remove(func(p): return p["source"] == source)
+
+
+## Muda o personagem de um jogador local (dir = -1 ou +1).
+func cycle_character(source: InputSource, dir: int) -> void:
+	if Net.is_client():
+		_request_character.rpc_id(1, source.get_id(), dir)
+	else:
+		_cycle(func(p): return p["source"] == source, dir)
+
+
+func _cycle(filter: Callable, dir: int) -> void:
+	for p in players:
+		if filter.call(p):
+			p["character"] = posmod(p["character"] + dir, Art.CHEFS.size())
+			_changed()
 
 
 func has_source(source: InputSource) -> bool:
@@ -56,8 +71,12 @@ func _add(source: InputSource, peer: int, source_id: String, label: String) -> v
 	var slot := 0
 	while get_player(slot):
 		slot += 1
+	# Cada jogador começa com um personagem diferente.
+	var character := slot
+	while players.any(func(p): return p["character"] == character):
+		character = (character + 1) % Art.CHEFS.size()
 	players.append({"slot": slot, "source": source, "color": COLORS[slot],
-		"peer": peer, "source_id": source_id, "label": label})
+		"peer": peer, "source_id": source_id, "label": label, "character": character})
 	players.sort_custom(func(a, b): return a["slot"] < b["slot"])
 	_changed()
 
@@ -76,13 +95,20 @@ func _changed() -> void:
 
 
 func _export() -> Array:
-	return players.map(func(p): return [p["slot"], p["peer"], p["source_id"], p["label"]])
+	return players.map(func(p): return [p["slot"], p["peer"], p["source_id"], p["label"], p["character"]])
 
 
 @rpc("any_peer", "call_remote", "reliable")
 func _request_join(source_id: String, label: String) -> void:
 	if multiplayer.is_server() and not Net.in_game:
 		_add(RemoteSource.new(label), multiplayer.get_remote_sender_id(), source_id, label)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_character(source_id: String, dir: int) -> void:
+	if multiplayer.is_server() and not Net.in_game:
+		var peer := multiplayer.get_remote_sender_id()
+		_cycle(func(p): return p["peer"] == peer and p["source_id"] == source_id, dir)
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -100,5 +126,5 @@ func _sync(list: Array) -> void:
 		if source == null:
 			source = RemoteSource.new(e[3])
 		players.append({"slot": e[0], "source": source, "color": COLORS[e[0]],
-			"peer": e[1], "source_id": e[2], "label": e[3]})
+			"peer": e[1], "source_id": e[2], "label": e[3], "character": e[4]})
 	players_changed.emit()

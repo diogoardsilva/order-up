@@ -72,19 +72,19 @@ func local_addresses() -> PackedStringArray:
 func start_level() -> void:
 	in_game = true
 	GameState.mode = GameState.Mode.PLAY
-	get_tree().change_scene_to_file("res://scenes/level.tscn")
+	Transition.go("res://scenes/level.tscn")
 
 
 @rpc("authority", "call_local", "reliable")
 func return_to_lobby() -> void:
 	in_game = false
-	get_tree().change_scene_to_file("res://scenes/lobby.tscn")
+	Transition.go("res://scenes/lobby.tscn")
 
 
 func _back_to_menu(message: String) -> void:
 	leave()
 	GameState.menu_message = message
-	get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+	Transition.go("res://scenes/main_menu.tscn")
 
 
 func _on_peer_connected(peer: int) -> void:

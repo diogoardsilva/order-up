@@ -1,7 +1,13 @@
 class_name Art
 ## Sprites de pixel art (gerados por tools/make_sprites.py) e ajudas para os desenhar.
 
-const CHEF := preload("res://assets/sprites/chef.png")
+## Personagens que se podem escolher (tools/make_sprites.py, CHARACTERS).
+const CHEFS: Array[Texture2D] = [
+	preload("res://assets/sprites/chef_0.png"), preload("res://assets/sprites/chef_1.png"),
+	preload("res://assets/sprites/chef_2.png"), preload("res://assets/sprites/chef_3.png"),
+	preload("res://assets/sprites/chef_4.png"), preload("res://assets/sprites/chef_5.png"),
+]
+const CHEF_NAMES: Array[String] = ["Rui", "Bia", "Tó", "Inês", "Zé", "Mia"]
 const CHEF_TINT := preload("res://assets/sprites/chef_tint.png")
 const CUSTOMER := preload("res://assets/sprites/customer.png")
 const CUSTOMER_TINT := preload("res://assets/sprites/customer_tint.png")
@@ -26,6 +32,11 @@ const DOOR := preload("res://assets/sprites/door.png")
 const BUBBLE := preload("res://assets/sprites/bubble.png")
 const PLATE := preload("res://assets/sprites/plate.png")
 const DIRT := preload("res://assets/sprites/dirt.png")
+const STAR := preload("res://assets/sprites/star.png")
+const STAR_EMPTY := preload("res://assets/sprites/star_empty.png")
+const ARROW := preload("res://assets/sprites/arrow.png")
+const CLOCK := preload("res://assets/sprites/clock.png")
+const COIN := preload("res://assets/sprites/coin.png")
 const CONTENT := {
 	"tomato": preload("res://assets/sprites/tomato.png"),
 	"lettuce": preload("res://assets/sprites/lettuce.png"),
@@ -51,5 +62,6 @@ static func frame(ci: CanvasItem, sheet: Texture2D, size: Vector2i, col: int, ro
 	var src := Rect2(Vector2(col * size.x, row * size.y), size)
 	var dst := Rect2(top_left.round(), size)
 	if flip:
-		dst = Rect2(dst.position + Vector2(size.x, 0), Vector2(-size.x, size.y))
+		# Com largura negativa o Godot espelha a imagem dentro do mesmo retângulo.
+		dst = Rect2(dst.position, Vector2(-size.x, size.y))
 	ci.draw_texture_rect_region(sheet, dst, src, modulate)

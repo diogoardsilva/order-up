@@ -17,12 +17,19 @@ func update(delta: float) -> void:
 
 
 func draw(ci: CanvasItem) -> void:
-	var font := ThemeDB.fallback_font
+	var font := UiStyle.FONT
 	for p in _items:
 		var color: Color = p["color"]
 		color.a *= clampf(p["life"] / p["max"] * 1.5, 0.0, 1.0)
 		if p.has("text"):
-			ci.draw_string(font, (p["pos"] - Vector2(20, 0)).round(), p["text"], HORIZONTAL_ALIGNMENT_CENTER, 40, 10, color)
+			# Cresce ao aparecer e tem sombra para se ler sobre qualquer fundo.
+			var age: float = p["max"] - p["life"]
+			var s := 1.0 + maxf(0.0, 0.15 - age) * 4.0
+			ci.draw_set_transform(p["pos"].round(), 0.0, Vector2(s, s))
+			var shadow := Color(UiStyle.INK, color.a)
+			ci.draw_string(font, Vector2(-30, 1), p["text"], HORIZONTAL_ALIGNMENT_CENTER, 60, 11, shadow)
+			ci.draw_string(font, Vector2(-30, 0), p["text"], HORIZONTAL_ALIGNMENT_CENTER, 60, 11, color)
+			ci.draw_set_transform(Vector2.ZERO)
 		else:
 			ci.draw_rect(Rect2(p["pos"].round(), Vector2.ONE * p["size"]), color)
 
@@ -52,6 +59,11 @@ func sparkle(at: Vector2) -> void:
 	for i in 10:
 		var dir := Vector2.RIGHT.rotated(TAU * i / 10.0)
 		_add(at, dir * randf_range(25, 45), 0.5, Color("f2c94c"), 2)
+
+
+func dust(at: Vector2, dir: Vector2) -> void:
+	_add(at, dir * randf_range(20, 40) + Vector2(randf_range(-10, 10), randf_range(-12, -4)), 0.35,
+		Color(0.95, 0.9, 0.8, 0.8), 2)
 
 
 func text(at: Vector2, value: String, color: Color) -> void:

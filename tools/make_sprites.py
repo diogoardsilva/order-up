@@ -122,13 +122,14 @@ def check(name, rows):
         assert len(row) == width, f"{name}: linha {i} tem {len(row)} em vez de {width}: {row!r}"
 
 
-def sheet(name, frames_by_row, fw, fh, hair_rows=None):
+def sheet(name, frames_by_row, fw, fh, hair_rows=None, colors=None, with_tint=True):
     """Monta uma folha de sprites com contorno automático e camada _tint."""
     cols = max(len(r) for r in frames_by_row)
     base = Image.new("RGBA", (fw * cols, fh * len(frames_by_row)), (0, 0, 0, 0))
     tint = base.copy()
     for ry, frames in enumerate(frames_by_row):
         pal = dict(PALETTE)
+        pal.update(colors or {})
         if hair_rows:
             pal["h"], pal["H"] = hair_rows[ry]
         for cx, rows in enumerate(frames):
@@ -152,7 +153,8 @@ def sheet(name, frames_by_row, fw, fh, hair_rows=None):
             base.alpha_composite(b.im, (cx * fw, ry * fh))
             tint.alpha_composite(t.im, (cx * fw, ry * fh))
     base.save(OUT / f"{name}.png")
-    tint.save(OUT / f"{name}_tint.png")
+    if with_tint:
+        tint.save(OUT / f"{name}_tint.png")
 
 
 HAT = [
@@ -227,12 +229,58 @@ LEGS_SIDE = [
 ]
 
 
+SKINS = {
+    "clara": ("#ffd7a8", "#efa877"), "morena": ("#e8b07a", "#c8834f"),
+    "media": ("#d39260", "#ac6a3c"), "escura": ("#97603c", "#74452a"),
+}
+## Personagens que se podem escolher no lobby: (pele, cabelo, cabelo comprido, bigode).
+CHARACTERS = [
+    ("clara", ("#8a4e2a", "#5e321c"), False, False),
+    ("clara", ("#f2c45a", "#c88f32"), True, False),
+    ("morena", ("#3d3045", "#241c2b"), False, True),
+    ("escura", ("#2e2430", "#1a141c"), True, False),
+    ("media", ("#d8642e", "#9e3e1c"), False, False),
+    ("clara", ("#b07ad8", "#7e4fa6"), True, False),
+]
+
+
+def put(rows, x, y, ch):
+    rows[y] = rows[y][:x] + ch + rows[y][x + 1:]
+
+
+def chef_frames(long_hair, mustache):
+    result = []
+    for d, (face, coat, legs) in enumerate([(FACE_DOWN, COAT_DOWN, LEGS_DOWN), (FACE_UP, COAT_UP, LEGS_DOWN),
+                                            (FACE_SIDE, COAT_SIDE, LEGS_SIDE)]):
+        frames = []
+        for leg in legs:
+            rows = list(HAT + face + coat + leg)
+            if long_hair:
+                if d == 0:
+                    for y in range(7, 12):
+                        put(rows, 2, y, "h"); put(rows, 13, y, "H")
+                elif d == 1:
+                    for y in (12, 13, 14):
+                        for x in range(5, 11):
+                            put(rows, x, y, "h" if y < 14 else "H")
+                else:
+                    for y in range(7, 13):
+                        put(rows, 2, y, "h")
+                    put(rows, 3, 13, "H"); put(rows, 3, 12, "h")
+            if mustache and d == 0:
+                put(rows, 6, 10, "H"); put(rows, 7, 10, "H"); put(rows, 8, 10, "H"); put(rows, 9, 10, "H")
+            if mustache and d == 2:
+                put(rows, 11, 11, "H"); put(rows, 12, 11, "H")
+            frames.append(rows)
+        result.append(frames)
+    return result
+
+
 def chef_sheet():
-    rows = []
-    for face, coat, legs in [(FACE_DOWN, COAT_DOWN, LEGS_DOWN), (FACE_UP, COAT_UP, LEGS_DOWN),
-                             (FACE_SIDE, COAT_SIDE, LEGS_SIDE)]:
-        rows.append([HAT + face + coat + leg for leg in legs])
-    sheet("chef", rows, 16, 24)
+    for i, (skin, hair, long_hair, mustache) in enumerate(CHARACTERS):
+        colors = {"s": SKINS[skin][0], "S": SKINS[skin][1], "h": hair[0], "H": hair[1]}
+        sheet(f"chef_{i}", chef_frames(long_hair, mustache), 16, 24, colors=colors, with_tint=(i == 0))
+    (OUT / "chef_0_tint.png").replace(OUT / "chef_tint.png")
 
 
 CUSTOMER_HAIR = [
@@ -676,6 +724,95 @@ def door():
     return s
 
 
+# --- Interface (guardada a 2x: cada píxel da arte ocupa 2x2 no ecrã) ---------
+
+def x2(spr):
+    out = Spr(spr.w * 2, spr.h * 2)
+    out.im = spr.im.resize((spr.w * 2, spr.h * 2), Image.NEAREST)
+    return out
+
+
+def ui_panel():
+    """Moldura de madeira com papel creme por dentro (9-slice, margem 6)."""
+    s = Spr(16, 16)
+    s.rect(0, 0, 16, 16, OUTLINE)
+    s.rect(1, 1, 14, 14, WOOD[2])
+    s.hline(1, 1, 14, WOOD[0]); s.vline(1, 1, 14, WOOD[1])
+    s.hline(1, 14, 14, WOOD[4]); s.vline(14, 1, 14, WOOD[3])
+    s.rect(4, 4, 8, 8, CREAM[1])
+    s.hline(4, 4, 8, CREAM[3]); s.vline(4, 4, 8, CREAM[3])
+    s.hline(4, 11, 8, CREAM[0]); s.vline(11, 4, 8, CREAM[0])
+    s.rect(5, 5, 6, 6, CREAM[1])
+    for x, y in [(2, 2), (13, 2), (2, 13), (13, 13)]:
+        s.px(x, y, CREAM[3])
+    return s
+
+
+def ui_paper():
+    s = Spr(12, 12)
+    s.rect(0, 0, 12, 12, OUTLINE)
+    s.rect(1, 1, 10, 10, CREAM[1])
+    s.hline(1, 1, 10, CREAM[0]); s.hline(1, 10, 10, CREAM[2])
+    for x in (0, 11):
+        for y in (0, 11):
+            s.px(x, y, (0, 0, 0, 0))
+    return s
+
+
+def ui_button(state):
+    """Botão de madeira: 0 normal, 1 com foco, 2 carregado."""
+    s = Spr(16, 12)
+    ramp = WOOD if state != 1 else ["#ffe0a0", "#f6c47a", "#e09a55", "#c0763a", "#94532a"]
+    top = 1 if state == 2 else 0
+    s.rect(0, top, 16, 12 - top, OUTLINE)
+    s.rect(1, top + 1, 14, 9 - top, ramp[1])
+    s.hline(1, top + 1, 14, ramp[0])
+    s.rect(1, 10, 14, 1, ramp[3])
+    if state != 2:
+        s.hline(1, 9, 14, ramp[2])
+    for x in (0, 15):
+        s.px(x, top, (0, 0, 0, 0)); s.px(x, 11, (0, 0, 0, 0))
+    if state == 1:
+        s.px(2, top + 2, "#ffffff")
+    return s
+
+
+def star(full):
+    s = Spr(13, 13)
+    pts = []
+    for i in range(10):
+        r = 6.0 if i % 2 == 0 else 2.6
+        a = math.radians(-90 + i * 36)
+        pts.append((6.5 + math.cos(a) * r, 6.8 + math.sin(a) * r))
+    from PIL import ImageDraw
+    d = ImageDraw.Draw(s.im)
+    d.polygon(pts, fill=rgba("#f6c444" if full else "#9c7b52"))
+    if full:
+        s.px(5, 4, "#fff3b0"); s.px(4, 5, "#fff3b0"); s.px(5, 5, "#ffe070")
+    return s.outline()
+
+
+def arrow():
+    s = Spr(6, 9)
+    for i in range(4):
+        s.vline(1 + i, 1 + i, 7 - 2 * i, CREAM[0] if i < 2 else CREAM[1])
+    return s.outline()
+
+
+def clock():
+    s = Spr(12, 12)
+    s.ellipse(6, 6, 5, 5, ["#ffffff", "#f6e6c4", "#e6cfa0"], flat=True)
+    s.vline(6, 3, 4, OUTLINE); s.hline(6, 6, 3, OUTLINE)
+    return s.outline()
+
+
+def coin():
+    s = Spr(12, 12)
+    s.ellipse(6, 6, 5, 5, ["#fff3b0", "#f6c444", "#d89a2a", "#a86a1a"])
+    s.vline(6, 3, 6, "#a86a1a")
+    return s.outline()
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     chef_sheet()
@@ -690,6 +827,13 @@ def main():
         ("chair", chair), ("door", door),
     ]:
         fn().save(name)
+    for name, fn in [
+        ("ui_panel", ui_panel), ("ui_paper", ui_paper), ("ui_button", lambda: ui_button(0)),
+        ("ui_button_focus", lambda: ui_button(1)), ("ui_button_pressed", lambda: ui_button(2)),
+        ("star", lambda: star(True)), ("star_empty", lambda: star(False)), ("arrow", arrow),
+        ("clock", clock), ("coin", coin),
+    ]:
+        x2(fn()).save(name)
     print("Sprites escritos em", OUT)
 
 

@@ -17,15 +17,19 @@ GameState="*res://scripts/autoload/game_state.gd"
 DeviceManager="*res://scripts/autoload/device_manager.gd"
 PlayerRegistry="*res://scripts/autoload/player_registry.gd"
 Net="*res://scripts/autoload/net.gd"
+Sfx="*res://scripts/autoload/sfx.gd"
+Transition="*res://scripts/autoload/transition.gd"
 
 [display]
 
-window/size/viewport_width=640
-window/size/viewport_height=360
-window/size/window_width_override=1280
-window/size/window_height_override=720
-window/stretch/mode="viewport"
-window/stretch/scale_mode="integer"
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+
+[gui]
+
+theme/custom_font="res://assets/fonts/Jersey15.ttf"
 
 [rendering]
 

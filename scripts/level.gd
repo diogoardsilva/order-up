@@ -2,15 +2,16 @@ extends Node2D
 ## Um nível: cozinha, chefs, pedidos, HUD e ecrã de resultados.
 ## Online, o anfitrião simula a cozinha e envia o estado ~20 vezes por segundo;
 ## cada PC mexe os seus chefs, envia-lhe as posições e pede as interações.
+## O mundo é pixel art a 640x360 desenhado a 2x; a HUD é desenhada a 1280x720.
 
 const ROUND_TIME := 180.0
 const KITCHEN_OFFSET := Vector2(80, 44)
+const WORLD_SCALE := 2.0
 ## Pontos para 1, 2 e 3 estrelas.
 const STAR_SCORES: Array[int] = [40, 100, 180]
-const PAPER := Color("f6e6c4")
-const PAPER_INK := Color("3b2027")
 ## Frames de física entre envios (60 / 3 = 20 por segundo).
 const NET_SEND_EVERY := 3
+const TICKET_SIZE := Vector2(244, 76)
 
 var _orders: OrderManager
 var _kitchen: Kitchen
@@ -21,6 +22,15 @@ var _tutorial: Tutorial
 var _tutorial_label: Label
 var _ready_peers: Array[int] = []
 var _net_frame := 0
+# Animações da HUD.
+var _clock := 0.0
+var _ticket_born := {}  # id do cliente -> momento em que o talão apareceu
+var _shown_score := 0.0
+var _score_pulse := 0.0
+var _last_score := 0
+var _finish_time := 0.0
+var _last_second := -1
+var _stars_played := 0
 
 
 func _ready() -> void:
@@ -29,7 +39,8 @@ func _ready() -> void:
 	add_child(_orders)
 	_kitchen = Kitchen.new(_orders)
 	_kitchen.name = "Kitchen"
-	_kitchen.position = KITCHEN_OFFSET
+	_kitchen.position = KITCHEN_OFFSET * WORLD_SCALE
+	_kitchen.scale = Vector2.ONE * WORLD_SCALE
 	add_child(_kitchen)
 	_orders.kitchen = _kitchen
 	if Net.is_client():
@@ -45,6 +56,7 @@ func _ready() -> void:
 		chef.source = p["source"]
 		chef.color = p["color"]
 		chef.slot = p["slot"]
+		chef.character = p.get("character", 0)
 		chef.kitchen = _kitchen
 		chef.position = _kitchen.spawns[p["slot"]]
 		chef.is_local = not p["source"] is RemoteSource
@@ -65,24 +77,20 @@ func _ready() -> void:
 	if _orders.scripted:
 		_tutorial = Tutorial.new(_kitchen, _orders)
 		var panel := PanelContainer.new()
-		panel.position = Vector2(244, 2)
-		panel.custom_minimum_size = Vector2(392, 40)
-		var style := StyleBoxFlat.new()
-		style.bg_color = UiStyle.PANEL
-		style.border_color = Color("f2c94c")
-		style.set_border_width_all(1)
-		style.set_content_margin_all(4)
-		panel.add_theme_stylebox_override("panel", style)
-		_tutorial_label = Label.new()
+		panel.add_theme_stylebox_override("panel", UiStyle.paper_box())
+		panel.position = Vector2(280, 8)
+		panel.custom_minimum_size = Vector2(840, 78)
+		_tutorial_label = UiStyle.label("", 19, UiStyle.INK)
+		_tutorial_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		_tutorial_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		_tutorial_label.custom_minimum_size.x = 382
-		_tutorial_label.add_theme_font_size_override("font_size", 9)
+		_tutorial_label.custom_minimum_size.x = 816
 		panel.add_child(_tutorial_label)
 		layer.add_child(panel)
 
 	PlayerRegistry.players_changed.connect(_on_players_changed)
 	if Net.is_client():
 		_rpc_client_ready.rpc_id(1)
+	Sfx.music_on()
 
 
 func _physics_process(delta: float) -> void:
@@ -107,6 +115,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _process(delta: float) -> void:
+	_clock += delta
 	if _tutorial:
 		_tutorial.update()
 		_tutorial_label.text = _tutorial.text()
@@ -118,12 +127,30 @@ func _process(delta: float) -> void:
 		_time_left = maxf(_time_left - delta, 0.0)
 		if _time_left == 0.0:
 			_finish()
+	# Tique-taque nos últimos 10 segundos.
+	var sec := ceili(_time_left)
+	if not _tutorial and not _finished and sec <= 10 and sec != _last_second:
+		Sfx.play("ui_move", -4.0, 0.0)
+	_last_second = sec
+	# Pontuação a subir aos poucos, com um "pulo" quando aumenta.
+	if _orders.score > _last_score:
+		_score_pulse = 1.0
+	_last_score = _orders.score
+	_shown_score = move_toward(_shown_score, _orders.score, maxf(40.0, absf(_orders.score - _shown_score) * 4.0) * delta)
+	_score_pulse = maxf(_score_pulse - delta * 2.5, 0.0)
+	if _finished:
+		_finish_time += delta
+		var stars := _stars() if not _tutorial else 0
+		while _stars_played < stars and _finish_time > 1.0 + _stars_played * 0.45:
+			_stars_played += 1
+			Sfx.play("coin", 0.0, 0.0)
 	_hud.queue_redraw()
 
 
 func _finish() -> void:
 	_finished = true
 	_orders.active = false
+	Sfx.play("round_end")
 	for chef in _kitchen.chefs:
 		chef.frozen = true
 
@@ -133,59 +160,128 @@ func _stars() -> int:
 
 
 func _draw_hud() -> void:
-	var font := ThemeDB.fallback_font
-	# Pedidos.
+	var font := UiStyle.FONT
+	_draw_tickets()
+	_draw_players()
+	if not _tutorial:
+		# Relógio e pontos à direita.
+		var secs := ceili(_time_left)
+		var urgent := secs <= 30 and not _finished
+		var clock_rect := Rect2(1132, 10, 138, 60)
+		_hud.draw_style_box(UiStyle.panel_box(), clock_rect)
+		_hud.draw_texture_rect(Art.CLOCK, Rect2(clock_rect.position + Vector2(14, 18), Vector2(24, 24)), false)
+		var pulse := 1.0 + (0.12 * absf(sin(_clock * 6.0)) if urgent else 0.0)
+		_hud.draw_set_transform(clock_rect.position + Vector2(90, 40), 0.0, Vector2(pulse, pulse))
+		_hud.draw_string(font, Vector2(-44, 0), "%d:%02d" % [secs / 60, secs % 60], HORIZONTAL_ALIGNMENT_CENTER, 88, 30,
+			UiStyle.RED if urgent else UiStyle.INK)
+		_hud.draw_set_transform(Vector2.ZERO)
+		var score_rect := Rect2(1132, 78, 138, 60)
+		_hud.draw_style_box(UiStyle.panel_box(), score_rect)
+		_hud.draw_texture_rect(Art.COIN, Rect2(score_rect.position + Vector2(14, 18), Vector2(24, 24)), false)
+		var s := 1.0 + _score_pulse * 0.35
+		_hud.draw_set_transform(score_rect.position + Vector2(90, 40), 0.0, Vector2(s, s))
+		_hud.draw_string(font, Vector2(-44, 0), "%d" % roundi(_shown_score), HORIZONTAL_ALIGNMENT_CENTER, 88, 30, UiStyle.INK)
+		_hud.draw_set_transform(Vector2.ZERO)
+	# FPS para medir o desempenho em PCs fracos.
+	_hud.draw_string(font, Vector2(8, 712), "FPS %d" % Engine.get_frames_per_second(),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, UiStyle.MUTED)
+	if _finished:
+		_draw_results()
+
+
+func _draw_tickets() -> void:
+	var font := UiStyle.FONT
+	var alive := {}
 	for i in _orders.orders.size():
 		var order := _orders.orders[i]
-		var rect := Rect2(8 + i * 134, 4, 130, 36)
-		# Talão de papel.
-		_hud.draw_rect(rect.grow(1), PAPER_INK)
-		_hud.draw_rect(rect, PAPER)
-		_hud.draw_rect(Rect2(rect.position, Vector2(rect.size.x, 2)), Color("fff8e6"))
-		_hud.draw_rect(Rect2(rect.position + Vector2(0, rect.size.y - 2), Vector2(rect.size.x, 2)), Color("e6cfa0"))
+		var id: int = order["id"]
+		alive[id] = true
+		if not _ticket_born.has(id):
+			_ticket_born[id] = _clock
+		var age: float = _clock - _ticket_born[id]
+		var drop := 1.0 - ease(clampf(age / 0.35, 0.0, 1.0), -2.0)
+		var t: float = order["time_left"] / order["max_time"]
+		var shake := Vector2(sin(_clock * 40.0) * 2.0, 0) if t < 0.25 and not _tutorial else Vector2.ZERO
+		var rect := Rect2(Vector2(16 + i * 256, 10 - drop * 110) + shake, TICKET_SIZE)
+		_hud.draw_style_box(UiStyle.paper_box(), rect)
 		var plate := Item.plate()
 		plate.contents.assign(order["recipe"]["needs"])
-		ItemArt.draw_item(_hud, plate, rect.position + Vector2(14, 15))
-		_hud.draw_string(font, rect.position + Vector2(27, 12), "%s · mesa %d" % [order["recipe"]["name"], order["table"]],
-			HORIZONTAL_ALIGNMENT_LEFT, 100, 9, PAPER_INK)
-		_hud.draw_string(font, rect.position + Vector2(27, 23), order["recipe"]["hint"],
-			HORIZONTAL_ALIGNMENT_LEFT, 102, 7, Color("94532a"))
+		_hud.draw_set_transform(rect.position + Vector2(36, 36), 0.0, Vector2(2.5, 2.5))
+		ItemArt.draw_item(_hud, plate, Vector2.ZERO)
+		_hud.draw_set_transform(Vector2.ZERO)
+		_hud.draw_string(font, rect.position + Vector2(72, 28), order["recipe"]["name"],
+			HORIZONTAL_ALIGNMENT_LEFT, 120, 22, UiStyle.INK)
+		_hud.draw_string(font, rect.position + Vector2(72, 50), order["recipe"]["hint"],
+			HORIZONTAL_ALIGNMENT_LEFT, 164, 14, UiStyle.INK_SOFT)
+		# Número da mesa num carimbo.
+		var badge := Rect2(rect.position + Vector2(rect.size.x - 50, 8), Vector2(40, 24))
+		_hud.draw_rect(badge, Color("a02530"))
+		_hud.draw_string(font, badge.position + Vector2(0, 19), "M%d" % order["table"], HORIZONTAL_ALIGNMENT_CENTER, 40, 18, UiStyle.TEXT)
 		if _tutorial:
 			continue
-		var t: float = order["time_left"] / order["max_time"]
-		var bar := Rect2(rect.position + Vector2(4, 28), Vector2(122, 4))
+		var bar := Rect2(rect.position + Vector2(72, 58), Vector2(160, 8))
+		_hud.draw_rect(bar.grow(2), UiStyle.INK)
 		_hud.draw_rect(bar, Color("c9a877"))
-		_hud.draw_rect(Rect2(bar.position, Vector2(bar.size.x * t, 4)), Color("e8574d").lerp(Color("6fcf6a"), t))
-	if not _tutorial:
-		var secs := ceili(_time_left)
-		_shadow_text(font, Vector2(500, 18), "%d:%02d" % [secs / 60, secs % 60], 16, Color("fff8e6"))
-		_shadow_text(font, Vector2(500, 36), "Pontos: %d" % _orders.score, 12, Color("f2c94c"))
-	# FPS para medir o desempenho em PCs fracos.
-	_hud.draw_string(font, Vector2(4, 356), "FPS %d" % Engine.get_frames_per_second(),
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiStyle.MUTED)
-
-	if _finished:
-		_hud.draw_rect(Rect2(Vector2.ZERO, Vector2(640, 360)), Color(0, 0, 0, 0.7))
-		var lines := [
-			["Tutorial concluído!", 28, UiStyle.TEXT],
-			["Já sabes cozinhar, servir às mesas e lavar pratos. Agora é a sério: 3 minutos e clientes impacientes.", 10, UiStyle.TEXT],
-			["Carrega em pegar para ir jogar", 10, UiStyle.MUTED],
-		] if _tutorial else [
-			["Fim do serviço!", 28, UiStyle.TEXT],
-			["Entregues: %d   ·   Falhados: %d" % [_orders.delivered_count, _orders.failed_count], 12, UiStyle.TEXT],
-			["Pontos: %d" % _orders.score, 20, Color("f2c94c")],
-			["★".repeat(_stars()) + "☆".repeat(3 - _stars()), 28, Color("f2c94c")],
-			["À espera do anfitrião..." if Net.is_client() else "Carrega em pegar para voltar ao lobby", 10, UiStyle.MUTED],
-		]
-		var y := 110.0
-		for line in lines:
-			_hud.draw_string(font, Vector2(0, y), line[0], HORIZONTAL_ALIGNMENT_CENTER, 640, line[1], line[2])
-			y += line[1] + 14
+		_hud.draw_rect(Rect2(bar.position, Vector2(bar.size.x * t, bar.size.y)), UiStyle.RED.lerp(UiStyle.GREEN, t))
+	for id in _ticket_born.keys():
+		if not alive.has(id):
+			_ticket_born.erase(id)
 
 
-func _shadow_text(font: Font, at: Vector2, text: String, size: int, color: Color) -> void:
-	_hud.draw_string(font, at + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_RIGHT, 132, size, PAPER_INK)
-	_hud.draw_string(font, at, text, HORIZONTAL_ALIGNMENT_RIGHT, 132, size, color)
+## Retratos dos jogadores na coluna da esquerda.
+func _draw_players() -> void:
+	var y := 100.0
+	for chef in _kitchen.chefs:
+		var rect := Rect2(10, y, 140, 112)
+		_hud.draw_style_box(UiStyle.panel_box(), rect)
+		var bob := roundf(sin(_clock * 3.0 + chef.slot) * 2.0)
+		var top_left := rect.position + Vector2(46, 14 + bob)
+		_hud.draw_set_transform(top_left, 0.0, Vector2(3, 3))
+		Art.frame(_hud, Art.CHEFS[chef.character], Art.CHEF_FRAME, 0, 0, Vector2.ZERO)
+		Art.frame(_hud, Art.CHEF_TINT, Art.CHEF_FRAME, 0, 0, Vector2.ZERO, false, chef.color)
+		_hud.draw_set_transform(Vector2.ZERO)
+		_hud.draw_string(UiStyle.FONT, rect.position + Vector2(0, 104), "P%d %s" % [chef.slot + 1, Art.CHEF_NAMES[chef.character]],
+			HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 16, chef.color.darkened(0.35))
+		y += 122
+
+
+func _draw_results() -> void:
+	var font := UiStyle.FONT
+	var fade := clampf(_finish_time / 0.4, 0.0, 1.0)
+	_hud.draw_rect(Rect2(Vector2.ZERO, Vector2(1280, 720)), Color(0.1, 0.04, 0.05, 0.65 * fade))
+	var drop := 1.0 - ease(clampf((_finish_time - 0.15) / 0.5, 0.0, 1.0), -2.0)
+	var rect := Rect2(Vector2(320, 140 - drop * 700), Vector2(640, 440))
+	_hud.draw_style_box(UiStyle.panel_box(), rect)
+	var x := rect.position.x
+	var w := rect.size.x
+	var y := rect.position.y
+	if _tutorial:
+		_hud.draw_string(font, Vector2(x, y + 110), "Tutorial concluído!", HORIZONTAL_ALIGNMENT_CENTER, w, 52, UiStyle.INK)
+		_hud.draw_multiline_string(font, Vector2(x + 50, y + 180), "Já sabes anotar pedidos, cozinhar, servir às mesas e lavar pratos. Agora é a sério: 3 minutos e clientes impacientes.",
+			HORIZONTAL_ALIGNMENT_CENTER, w - 100, 24, -1, UiStyle.INK_SOFT)
+		_prompt(Vector2(x, y + 380), w, "Carrega em pegar para ir jogar")
+		return
+	_hud.draw_string(font, Vector2(x, y + 90), "Fim do serviço!", HORIZONTAL_ALIGNMENT_CENTER, w, 52, UiStyle.INK)
+	_hud.draw_string(font, Vector2(x, y + 140), "Entregues: %d    Falhados: %d" % [_orders.delivered_count, _orders.failed_count],
+		HORIZONTAL_ALIGNMENT_CENTER, w, 24, UiStyle.INK_SOFT)
+	_hud.draw_texture_rect(Art.COIN, Rect2(Vector2(x + w / 2 - 90, y + 168), Vector2(36, 36)), false)
+	_hud.draw_string(font, Vector2(x + w / 2 - 44, y + 200), "%d" % roundi(_shown_score), HORIZONTAL_ALIGNMENT_LEFT, -1, 40, UiStyle.INK)
+	for i in 3:
+		var center := Vector2(x + w / 2 + (i - 1) * 110, y + 280)
+		var age := _finish_time - (1.0 + i * 0.45)
+		var full := i < _stars_played
+		var s := 4.5
+		if full:
+			s *= 1.0 + 0.6 * maxf(0.0, 1.0 - age / 0.25) if age < 0.25 else 1.0
+		var tex := Art.STAR if full else Art.STAR_EMPTY
+		var size := tex.get_size() * s / 2.0
+		_hud.draw_texture_rect(tex, Rect2(center - size / 2.0, size), false)
+	_prompt(Vector2(x, y + 395), w, "À espera do anfitrião..." if Net.is_client() else "Carrega em pegar para voltar ao lobby")
+
+
+func _prompt(at: Vector2, width: float, text: String) -> void:
+	var a := 0.55 + 0.45 * sin(_clock * 4.0)
+	_hud.draw_string(UiStyle.FONT, at, text, HORIZONTAL_ALIGNMENT_CENTER, width, 22, Color(UiStyle.INK, a))
 
 
 func _on_interact(chef: Chef) -> void:
@@ -295,7 +391,7 @@ func _on_confirm() -> void:
 		return
 	if _tutorial:
 		GameState.mode = GameState.Mode.PLAY
-		get_tree().reload_current_scene.call_deferred()
+		Transition.reload()
 	else:
 		_back_to_lobby()
 
@@ -304,4 +400,4 @@ func _back_to_lobby() -> void:
 	if Net.online:
 		Net.return_to_lobby.rpc()
 	else:
-		get_tree().change_scene_to_file.call_deferred("res://scenes/lobby.tscn")
+		Transition.go("res://scenes/lobby.tscn")

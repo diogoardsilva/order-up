@@ -45,6 +45,10 @@ var simulate := true
 ## Células assinaladas com uma seta (usado pelo tutorial).
 var hint_cells: Array[Vector2i] = []
 var particles := Particles.new()
+# Para sons e animações: estado anterior de cada cliente e progresso das estações.
+var _customer_seen := {}  # id -> [estado, momento da mudança]
+var _station_progress := {}  # célula -> [progresso, tempo desde o último som]
+var _time := 0.0
 
 ## Um efeito de texto (pontos, "Anotado!"). Online, o nível reenvia-o aos outros PCs.
 signal fx(at: Vector2, text: String, color: Color, sparkle: bool)
@@ -122,6 +126,13 @@ func interact(chef: Chef, cell: Vector2i) -> void:
 
 
 func show_fx(at: Vector2, text: String, color: Color, sparkle := false) -> void:
+	if text.begins_with("+"):
+		Sfx.play("ding")
+		Sfx.play("coin", -4.0)
+	elif text.begins_with("-"):
+		Sfx.play("fail")
+	else:
+		Sfx.play("note")
 	if sparkle:
 		particles.sparkle(at)
 	particles.text(at + Vector2(0, -20), text, color)
@@ -149,7 +160,24 @@ func _process(delta: float) -> void:
 
 ## Fumo, vapor e suor que saem das estações e dos clientes.
 func _emit_ambient(delta: float) -> void:
+	_time += delta
+	var cooking := 0
 	for station: Station in stations.values():
+		# Sons de cortar e lavar enquanto o progresso avança (em todos os PCs).
+		var p := station.progress()
+		var last: Array = _station_progress.get(station.cell, [-1.0, 0.0])
+		last[1] += delta
+		if p > last[0] and p > 0.0:
+			if station is BoardStation and last[1] > 0.16:
+				Sfx.play("chop", -2.0, 0.15)
+				last[1] = 0.0
+			elif station is SinkStation and last[1] > 0.45:
+				Sfx.play("wash", -4.0, 0.1)
+				last[1] = 0.0
+		last[0] = p
+		_station_progress[station.cell] = last
+		if station is StoveStation and (station as StoveStation).state in [StoveStation.State.COOKING, StoveStation.State.READY]:
+			cooking += 1
 		var center := cell_center(station.cell)
 		if station is StoveStation:
 			var stove := station as StoveStation
@@ -163,9 +191,15 @@ func _emit_ambient(delta: float) -> void:
 			particles.chop(center, station.item)
 		elif station is SinkStation and station.progress() > 0.0 and randf() < delta * 10.0:
 			particles.bubble(center + Vector2(randf_range(-7, 7), randf_range(-3, 3)))
+	Sfx.set_sizzle(cooking / 2.0)
 	for customer in orders.customers:
 		if (customer.is_waiting() or customer.is_calling()) and customer.patience < customer.max_patience * 0.3 and randf() < delta * 3.0:
 			particles.sweat(customer.pos + Vector2(6, -14))
+		var seen: Array = _customer_seen.get(customer.id, [-1, 0.0])
+		if seen[0] != customer.state:
+			if customer.state == Customer.State.CALLING:
+				Sfx.play("bell", -3.0)
+			_customer_seen[customer.id] = [customer.state, _time]
 
 
 func _draw() -> void:
@@ -205,6 +239,7 @@ func _draw() -> void:
 			draw_rect(Rect2(Vector2(cell) * TILE, Vector2(TILE, TILE)).grow(-1), chef.color, false, 1.0)
 	for customer in orders.customers:
 		_draw_customer(customer)
+		_draw_customer_end()
 	var bob := sin(Time.get_ticks_msec() / 150.0) * 2.0
 	for cell in hint_cells:
 		var tip := (cell_center(cell) + Vector2(0, -TILE * 0.6 + bob)).round()
@@ -269,19 +304,27 @@ func _draw_wall(cell: Vector2i, rect: Rect2) -> void:
 
 func _draw_table(table: TableStation, rect: Rect2) -> void:
 	draw_texture(Art.TABLE, rect.position)
-	draw_string(ThemeDB.fallback_font, rect.position + Vector2(3, 10), "%d" % table.number,
+	draw_string(UiStyle.FONT, rect.position + Vector2(3, 10), "%d" % table.number,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color("a02530"))
 
 
 func _draw_customer(customer: Customer) -> void:
 	var seated := customer.state in [Customer.State.THINKING, Customer.State.CALLING, Customer.State.WAITING, Customer.State.EATING]
-	var col := 3 if seated else (0 if customer.is_still() else 1 + int(Time.get_ticks_msec() / 150.0) % 2)
-	var top_left := customer.pos - Vector2(Art.CUSTOMER_FRAME.x / 2.0, Art.CUSTOMER_FRAME.y - 6)
+	var walking := not seated and not customer.is_still()
+	var col := 3 if seated else (1 + int(Time.get_ticks_msec() / 150.0) % 2 if walking else 0)
+	var bob := -1.0 if walking and col == 1 else 0.0
+	var top_left := customer.pos - Vector2(Art.CUSTOMER_FRAME.x / 2.0, Art.CUSTOMER_FRAME.y - 6 - bob)
 	draw_circle(customer.pos + Vector2(0, 5), 5.0, Color(0, 0, 0, 0.2))
 	Art.frame(self, Art.CUSTOMER, Art.CUSTOMER_FRAME, col, customer.look, top_left)
 	Art.frame(self, Art.CUSTOMER_TINT, Art.CUSTOMER_FRAME, col, customer.look, top_left, false, customer.color)
-	var font := ThemeDB.fallback_font
+	var font := UiStyle.FONT
 	var head := customer.pos + Vector2(0, -16)
+	# Os balões aparecem a crescer com um pequeno salto.
+	var since: float = _time - _customer_seen.get(customer.id, [0, -10.0])[1]
+	var pop := 1.0 if since > 0.3 else ease(since / 0.3, 0.4) * (1.0 + 0.25 * sin(since / 0.3 * PI))
+	if customer.state in [Customer.State.CALLING, Customer.State.WAITING]:
+		draw_set_transform(head + Vector2(0, -4), 0.0, Vector2(pop, pop))
+		head = Vector2(0, 4)
 	match customer.state:
 		Customer.State.THINKING:
 			var dots := ".".repeat(1 + int(Time.get_ticks_msec() / 300.0) % 3)
@@ -300,9 +343,20 @@ func _draw_customer(customer: Customer) -> void:
 			plate.contents.assign(customer.recipe["needs"])
 			ItemArt.draw_item(self, plate, bubble_center + Vector2(0, -1))
 			_draw_patience(customer, bubble_center)
+		Customer.State.EATING:
+			# Garfadas: corações pequenos de vez em quando.
+			if int(since * 2.0) % 3 == 0:
+				var h := (head + Vector2(-2, -6 - fmod(since * 6.0, 4.0))).round()
+				for r in [Rect2(h, Vector2(2, 2)), Rect2(h + Vector2(3, 0), Vector2(2, 2)), Rect2(h + Vector2(0, 1), Vector2(5, 2)),
+						Rect2(h + Vector2(1, 3), Vector2(3, 1)), Rect2(h + Vector2(2, 4), Vector2(1, 1))]:
+					draw_rect(r, UiStyle.RED)
 		Customer.State.LEAVING:
 			if customer.angry:
 				draw_string(font, head + Vector2(-12, -2), "!!", HORIZONTAL_ALIGNMENT_CENTER, 24, 12, Color("e8574d"))
+
+
+func _draw_customer_end() -> void:
+	draw_set_transform(Vector2.ZERO)
 
 
 func _draw_patience(customer: Customer, bubble_center: Vector2) -> void:
@@ -331,7 +385,7 @@ func _draw_stove(stove: StoveStation, rect: Rect2) -> void:
 			ItemArt.draw_content(self, "soup", center)
 			# Alerta a piscar quando está quase a queimar.
 			if stove.is_burning_soon() and int(Time.get_ticks_msec() / 200.0) % 2 == 0:
-				draw_string(ThemeDB.fallback_font, rect.position + Vector2(0, -2), "!",
+				draw_string(UiStyle.FONT, rect.position + Vector2(0, -2), "!",
 					HORIZONTAL_ALIGNMENT_CENTER, TILE, 14, Color("e8574d"))
 		StoveStation.State.BURNT:
 			draw_circle(center, 6.0, Color("1e1a1a"))

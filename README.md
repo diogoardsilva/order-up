@@ -39,7 +39,9 @@ O restaurante tem a **cozinha** (esquerda) e o **salão** (direita). Têm 3 minu
 - Há poucos pratos (4). Quando o cliente acaba de comer, deixa o prato sujo na mesa: levem-no ao **lava-loiça**, larguem-no e mantenham "usar" para lavar. Depois peguem no prato limpo.
 - O caixote do lixo deita fora ingredientes e esvazia pratos.
 
-A pixel art é gerada por código: `python3 tools/make_sprites.py` desenha os sprites em `assets/sprites/` a partir de mapas de pixels em texto.
+A pixel art é gerada por código: `python3 tools/make_sprites.py` desenha os sprites em `assets/sprites/`. Os sons e a música também: `python3 tools/make_sounds.py` escreve-os em `assets/audio/`. A fonte é a Jersey 15 (licença OFL, em `assets/fonts/`).
+
+No lobby, cada jogador escolhe o seu chef com esquerda/direita (6 personagens).
 
 ## Jogar online
 
