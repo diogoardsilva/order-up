@@ -82,6 +82,9 @@ func _draw_hud() -> void:
 		HORIZONTAL_ALIGNMENT_RIGHT, 132, 16, UiStyle.TEXT)
 	_hud.draw_string(font, Vector2(500, 36), "Pontos: %d" % _orders.score,
 		HORIZONTAL_ALIGNMENT_RIGHT, 132, 12, Color("f2c94c"))
+	# FPS para medir o desempenho em PCs fracos.
+	_hud.draw_string(font, Vector2(4, 356), "FPS %d" % Engine.get_frames_per_second(),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiStyle.MUTED)
 
 	if _finished:
 		_hud.draw_rect(Rect2(Vector2.ZERO, Vector2(640, 360)), Color(0, 0, 0, 0.7))

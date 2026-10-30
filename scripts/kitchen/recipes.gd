@@ -3,7 +3,7 @@ class_name Recipes
 
 const ALL: Array[Dictionary] = [
 	{"id": "salad", "name": "Salada", "needs": ["lettuce_chopped", "tomato_chopped"], "points": 20},
-	{"id": "soup", "name": "Sopa de tomate", "needs": ["soup"], "points": 30},
+	{"id": "soup", "name": "Sopa", "needs": ["soup"], "points": 30},
 ]
 
 ## Ingredientes que se podem pôr diretamente num prato.
