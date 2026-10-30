@@ -26,6 +26,15 @@ const LAYOUT: Array[String] = [
 
 ## Coluna a partir da qual começa o salão.
 const DINING_FROM_X := 12
+## Altura da parede do fundo, desenhada por cima da primeira fila.
+const BACK_WALL := 22
+## Decoração: [textura, posição em píxeis da cozinha].
+const DECOR := [
+	["shelf", Vector2(28, -16)], ["shelf", Vector2(196, -16)],
+	["window", Vector2(315, 5)], ["window", Vector2(411, 5)],
+	["plant", Vector2(268, -6)], ["plant", Vector2(460, -6)], ["plant", Vector2(268, 168)],
+]
+const BG := Color("2a1a1e")
 
 var stations := {}  # Vector2i -> Station
 var spawns := {}  # slot -> Vector2
@@ -145,14 +154,35 @@ func _emit_ambient(delta: float) -> void:
 
 func _draw() -> void:
 	var cols := LAYOUT[0].length()
+	draw_rect(Rect2(Vector2(-200, -200), pixel_size() + Vector2(400, 400)), BG)
+	draw_rect(Rect2(Vector2(-3, -BACK_WALL - 3), pixel_size() + Vector2(6, BACK_WALL + 6)), Color("1a0f12"))
+	for x in cols:
+		var at := Vector2(x * TILE, -BACK_WALL)
+		if x < DINING_FROM_X - 1:
+			draw_texture(Art.BACKWALL_KITCHEN, at)
+		else:
+			draw_texture_rect_region(Art.WALL_TOP, Rect2(at, Vector2(TILE, BACK_WALL)), Rect2(0, 0, TILE, BACK_WALL))
 	for y in LAYOUT.size():
 		for x in cols:
-			draw_texture(Art.WOOD if x >= DINING_FROM_X else Art.FLOOR, Vector2(x, y) * TILE)
+			var tex := Art.WOOD if x >= DINING_FROM_X else Art.FLOOR
+			var n := tex.get_width() / TILE
+			draw_texture_rect_region(tex, Rect2(Vector2(x, y) * TILE, Vector2(TILE, TILE)),
+				Rect2(Vector2(x % n, y % n) * TILE, Vector2(TILE, TILE)))
+	# Sombra das bancadas no chão (luz de cima à esquerda).
+	for station: Station in stations.values():
+		var below := station.cell + Vector2i.DOWN
+		if below.y < LAYOUT.size() and not stations.has(below):
+			draw_rect(Rect2(Vector2(below) * TILE, Vector2(TILE, 4)), Color(0.2, 0.08, 0.05, 0.28))
+		var right := station.cell + Vector2i.RIGHT
+		if right.x < cols and not stations.has(right):
+			draw_rect(Rect2(Vector2(right) * TILE, Vector2(3, TILE)), Color(0.2, 0.08, 0.05, 0.18))
 	# Cadeiras primeiro, para os clientes sentados ficarem por cima.
 	for table in tables():
 		draw_texture(Art.CHAIR, Vector2(table.seat) * TILE)
 	for station: Station in stations.values():
 		_draw_station(station)
+	for d in DECOR:
+		draw_texture({"shelf": Art.SHELF, "window": Art.WINDOW, "plant": Art.PLANT}[d[0]], d[1])
 	for chef in chefs:
 		var cell := chef.target_cell()
 		if stations.has(cell):
@@ -174,12 +204,18 @@ func _draw_station(station: Station) -> void:
 		_draw_table(station as TableStation, rect)
 	elif LAYOUT[station.cell.y][station.cell.x] == "E":
 		draw_texture(Art.DOOR, rect.position)
-	else:
+	elif station.cell.x >= DINING_FROM_X - 1 and station.get_script() == Station:
+		_draw_wall(station.cell, rect)
+	elif station is StoveStation:
+		draw_texture(Art.STOVE, rect.position)
+	elif not station is TrashStation:
 		draw_texture(Art.COUNTER, rect.position)
 
 	if station is CrateStation:
 		draw_texture(Art.CRATE, rect.position + Vector2(0, -2))
-		ItemArt.draw_content(self, Item.KIND_IDS[(station as CrateStation).ingredient], center + Vector2(0, -2))
+		var id: String = Item.KIND_IDS[(station as CrateStation).ingredient]
+		for offset in [Vector2(-4, -1), Vector2(4, -1), Vector2(0, -4)]:
+			ItemArt.draw_content(self, id, center + Vector2(0, -3) + offset)
 	elif station is BoardStation:
 		draw_texture(Art.BOARD, rect.position)
 	elif station is StoveStation:
@@ -208,10 +244,17 @@ func _draw_station(station: Station) -> void:
 		draw_rect(Rect2(bar.position + Vector2.ONE, Vector2((bar.size.x - 2) * p, bar.size.y - 2)), Color("6fcf6a"))
 
 
+## Parede do salão: vista de frente quando há chão logo abaixo, senão só o topo.
+func _draw_wall(cell: Vector2i, rect: Rect2) -> void:
+	var below := cell + Vector2i.DOWN
+	var front := below.y < LAYOUT.size() and not stations.has(below)
+	draw_texture(Art.WALL_FRONT if front else Art.WALL_TOP, rect.position)
+
+
 func _draw_table(table: TableStation, rect: Rect2) -> void:
 	draw_texture(Art.TABLE, rect.position)
 	draw_string(ThemeDB.fallback_font, rect.position + Vector2(3, 10), "%d" % table.number,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color("a8323a"))
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color("a02530"))
 
 
 func _draw_customer(customer: Customer) -> void:
@@ -219,8 +262,8 @@ func _draw_customer(customer: Customer) -> void:
 	var col := 3 if seated else (0 if customer.is_still() else 1 + int(Time.get_ticks_msec() / 150.0) % 2)
 	var top_left := customer.pos - Vector2(Art.CUSTOMER_FRAME.x / 2.0, Art.CUSTOMER_FRAME.y - 6)
 	draw_circle(customer.pos + Vector2(0, 5), 5.0, Color(0, 0, 0, 0.2))
-	Art.frame(self, Art.CUSTOMER, Art.CUSTOMER_FRAME, col, 0, top_left)
-	Art.frame(self, Art.CUSTOMER_TINT, Art.CUSTOMER_FRAME, col, 0, top_left, false, customer.color)
+	Art.frame(self, Art.CUSTOMER, Art.CUSTOMER_FRAME, col, customer.look, top_left)
+	Art.frame(self, Art.CUSTOMER_TINT, Art.CUSTOMER_FRAME, col, customer.look, top_left, false, customer.color)
 	var font := ThemeDB.fallback_font
 	var head := customer.pos + Vector2(0, -16)
 	match customer.state:
@@ -255,11 +298,14 @@ func _draw_patience(customer: Customer, bubble_center: Vector2) -> void:
 
 func _draw_stove(stove: StoveStation, rect: Rect2) -> void:
 	var center := rect.get_center() + Vector2(0, -3)
-	draw_rect(Rect2(rect.position + Vector2(2, 2), Vector2(TILE - 4, TILE - 9)), Color("4a4a52"))
-	# Chama quando está ao lume.
+	# Chamas à volta da panela quando está ao lume.
 	if stove.state in [StoveStation.State.COOKING, StoveStation.State.READY]:
-		var flicker := int(Time.get_ticks_msec() / 90.0) % 2
-		draw_rect(Rect2(center + Vector2(-7, 5 - flicker), Vector2(14, 2 + flicker)), Color("e0703f"))
+		var t := Time.get_ticks_msec() / 90
+		for i in 5:
+			var h := 2 + (t + i * 3) % 3
+			var x := center.x - 8 + i * 4
+			draw_rect(Rect2(Vector2(x, center.y + 7 - h), Vector2(2, h)), Color("f2a03a"))
+			draw_rect(Rect2(Vector2(x, center.y + 7 - 1), Vector2(2, 1)), Color("e0503a"))
 	Art.centered(self, Art.POT, center)
 	match stove.state:
 		StoveStation.State.FILLING, StoveStation.State.COOKING:

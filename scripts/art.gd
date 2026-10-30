@@ -8,6 +8,13 @@ const CUSTOMER_TINT := preload("res://assets/sprites/customer_tint.png")
 const FLOOR := preload("res://assets/sprites/floor.png")
 const WOOD := preload("res://assets/sprites/wood.png")
 const COUNTER := preload("res://assets/sprites/counter.png")
+const STOVE := preload("res://assets/sprites/stove.png")
+const WALL_TOP := preload("res://assets/sprites/wall_top.png")
+const WALL_FRONT := preload("res://assets/sprites/wall_front.png")
+const BACKWALL_KITCHEN := preload("res://assets/sprites/backwall_kitchen.png")
+const WINDOW := preload("res://assets/sprites/window.png")
+const PLANT := preload("res://assets/sprites/plant.png")
+const SHELF := preload("res://assets/sprites/shelf.png")
 const CRATE := preload("res://assets/sprites/crate.png")
 const BOARD := preload("res://assets/sprites/board.png")
 const POT := preload("res://assets/sprites/pot.png")
@@ -27,8 +34,10 @@ const CONTENT := {
 	"soup": preload("res://assets/sprites/soup.png"),
 }
 
-const CHEF_FRAME := Vector2i(16, 22)
-const CUSTOMER_FRAME := Vector2i(14, 20)
+const CHEF_FRAME := Vector2i(16, 24)
+const CUSTOMER_FRAME := Vector2i(16, 22)
+## Linhas da folha de clientes (penteados diferentes).
+const CUSTOMER_LOOKS := 4
 
 
 ## Desenha uma textura centrada num ponto (arredondado ao píxel).

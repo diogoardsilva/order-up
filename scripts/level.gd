@@ -5,6 +5,8 @@ const ROUND_TIME := 180.0
 const KITCHEN_OFFSET := Vector2(80, 44)
 ## Pontos para 1, 2 e 3 estrelas.
 const STAR_SCORES: Array[int] = [40, 100, 180]
+const PAPER := Color("f6e6c4")
+const PAPER_INK := Color("3b2027")
 
 var _orders: OrderManager
 var _kitchen: Kitchen
@@ -95,26 +97,28 @@ func _draw_hud() -> void:
 	for i in _orders.orders.size():
 		var order := _orders.orders[i]
 		var rect := Rect2(8 + i * 134, 4, 130, 36)
-		_hud.draw_rect(rect, UiStyle.PANEL)
+		# Talão de papel.
+		_hud.draw_rect(rect.grow(1), PAPER_INK)
+		_hud.draw_rect(rect, PAPER)
+		_hud.draw_rect(Rect2(rect.position, Vector2(rect.size.x, 2)), Color("fff8e6"))
+		_hud.draw_rect(Rect2(rect.position + Vector2(0, rect.size.y - 2), Vector2(rect.size.x, 2)), Color("e6cfa0"))
 		var plate := Item.plate()
 		plate.contents.assign(order["recipe"]["needs"])
 		ItemArt.draw_item(_hud, plate, rect.position + Vector2(14, 15))
 		_hud.draw_string(font, rect.position + Vector2(27, 12), "%s · mesa %d" % [order["recipe"]["name"], order["table"]],
-			HORIZONTAL_ALIGNMENT_LEFT, 100, 9, UiStyle.TEXT)
+			HORIZONTAL_ALIGNMENT_LEFT, 100, 9, PAPER_INK)
 		_hud.draw_string(font, rect.position + Vector2(27, 23), order["recipe"]["hint"],
-			HORIZONTAL_ALIGNMENT_LEFT, 102, 7, UiStyle.MUTED)
+			HORIZONTAL_ALIGNMENT_LEFT, 102, 7, Color("94532a"))
 		if _tutorial:
 			continue
 		var t: float = order["time_left"] / order["max_time"]
 		var bar := Rect2(rect.position + Vector2(4, 28), Vector2(122, 4))
-		_hud.draw_rect(bar, UiStyle.BG)
+		_hud.draw_rect(bar, Color("c9a877"))
 		_hud.draw_rect(Rect2(bar.position, Vector2(bar.size.x * t, 4)), Color("e8574d").lerp(Color("6fcf6a"), t))
 	if not _tutorial:
 		var secs := ceili(_time_left)
-		_hud.draw_string(font, Vector2(500, 18), "%d:%02d" % [secs / 60, secs % 60],
-			HORIZONTAL_ALIGNMENT_RIGHT, 132, 16, UiStyle.TEXT)
-		_hud.draw_string(font, Vector2(500, 36), "Pontos: %d" % _orders.score,
-			HORIZONTAL_ALIGNMENT_RIGHT, 132, 12, Color("f2c94c"))
+		_shadow_text(font, Vector2(500, 18), "%d:%02d" % [secs / 60, secs % 60], 16, Color("fff8e6"))
+		_shadow_text(font, Vector2(500, 36), "Pontos: %d" % _orders.score, 12, Color("f2c94c"))
 	# FPS para medir o desempenho em PCs fracos.
 	_hud.draw_string(font, Vector2(4, 356), "FPS %d" % Engine.get_frames_per_second(),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiStyle.MUTED)
@@ -136,6 +140,11 @@ func _draw_hud() -> void:
 		for line in lines:
 			_hud.draw_string(font, Vector2(0, y), line[0], HORIZONTAL_ALIGNMENT_CENTER, 640, line[1], line[2])
 			y += line[1] + 14
+
+
+func _shadow_text(font: Font, at: Vector2, text: String, size: int, color: Color) -> void:
+	_hud.draw_string(font, at + Vector2(1, 1), text, HORIZONTAL_ALIGNMENT_RIGHT, 132, size, PAPER_INK)
+	_hud.draw_string(font, at, text, HORIZONTAL_ALIGNMENT_RIGHT, 132, size, color)
 
 
 func _on_confirm() -> void:

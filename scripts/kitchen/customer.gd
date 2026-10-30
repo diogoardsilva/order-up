@@ -19,6 +19,8 @@ var patience := 0.0
 var max_patience := 0.0
 var angry := false
 var color: Color = COLORS.pick_random()
+## Linha da folha de sprites (penteado).
+var look := randi() % Art.CUSTOMER_LOOKS
 
 var _timer := 0.0
 var _path: Array[Vector2] = []
