@@ -23,9 +23,11 @@ Usem a 4.7 (não a 4.3): o projeto foi feito para a 4.7.
 | Emote | Q | , | Triângulo |
 | Começar / pausa | Esc | Backspace | Options |
 
-O DualShock 4 funciona por USB ou Bluetooth sem DS4Windows. Se tiverem o DS4Windows aberto, fechem-no para o comando não aparecer duas vezes.
+Os menus também se usam com o comando (D-pad ou analógico, Cruz para confirmar, Círculo para voltar). O DualShock 4 funciona por USB ou Bluetooth sem DS4Windows. Se tiverem o DS4Windows aberto, fechem-no para o comando não aparecer duas vezes.
 
 ## Como se joga (protótipo M1)
+
+Na primeira vez que carregam em Jogar, o jogo começa por um tutorial guiado (uma salada e uma sopa, passo a passo). Depois de o terminarem, não volta a aparecer.
 
 Têm 3 minutos para servir o máximo de pedidos (aparecem no topo do ecrã).
 

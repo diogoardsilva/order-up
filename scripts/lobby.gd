@@ -15,7 +15,8 @@ func _ready() -> void:
 	var top := Control.new()
 	top.custom_minimum_size.y = 8
 	root.add_child(top)
-	root.add_child(UiStyle.label("Quem vai cozinhar?", 24))
+	root.add_child(UiStyle.label(
+		"Tutorial: quem vai aprender?" if GameState.mode == GameState.Mode.TUTORIAL else "Quem vai cozinhar?", 24))
 
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -25,7 +26,7 @@ func _ready() -> void:
 		row.add_child(_make_slot(i))
 
 	root.add_child(UiStyle.label(
-		"Entrar: Espaço / Enter / Cruz   ·   Sair: Shift / - / Círculo\nComeçar: Esc / Backspace / Options", 11, UiStyle.MUTED))
+		"Entrar: Espaço / Enter / Cruz   ·   Sair: Shift / - / Círculo\nComeçar: Esc / Backspace / Options (sem ninguém, volta ao menu)", 11, UiStyle.MUTED))
 	_pads_label = UiStyle.label("", 10, UiStyle.MUTED)
 	root.add_child(_pads_label)
 
@@ -48,7 +49,7 @@ func _process(_delta: float) -> void:
 		elif source.just_pressed(&"pause"):
 			if not PlayerRegistry.players.is_empty():
 				get_tree().change_scene_to_file("res://scenes/level.tscn")
-			elif source is KeyboardSource:
+			else:
 				get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 			return
 

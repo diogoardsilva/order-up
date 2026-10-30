@@ -16,6 +16,8 @@ const LAYOUTS := [
 	},
 ]
 
+const KEY_NAMES_PT := {"Space": "Espaço", "Escape": "Esc", "Up": "Cima", "Down": "Baixo", "Left": "Esquerda", "Right": "Direita"}
+
 var layout: int
 
 
@@ -32,7 +34,8 @@ func get_label() -> String:
 
 
 func prompt(action: StringName) -> String:
-	return OS.get_keycode_string(LAYOUTS[layout][String(action)])
+	var name := OS.get_keycode_string(LAYOUTS[layout][String(action)])
+	return KEY_NAMES_PT.get(name, name)
 
 
 func _key(name: String) -> bool:

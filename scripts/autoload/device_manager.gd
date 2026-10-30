@@ -11,6 +11,7 @@ var _pads := {}
 
 
 func _ready() -> void:
+	_add_menu_controls()
 	Input.joy_connection_changed.connect(_on_joy_connection_changed)
 	for device in Input.get_connected_joypads():
 		_pads[device] = GamepadSource.new(device)
@@ -29,6 +30,17 @@ func connected_pad_names() -> PackedStringArray:
 	for device in Input.get_connected_joypads():
 		names.append("#%d %s" % [device, Input.get_joy_name(device)])
 	return names
+
+
+## Os menus do Godot já aceitam D-pad e analógico, mas não o botão de confirmar
+## do comando. Junta Cruz/A para confirmar e Círculo/B para voltar.
+func _add_menu_controls() -> void:
+	var accept := InputEventJoypadButton.new()
+	accept.button_index = JOY_BUTTON_A
+	InputMap.action_add_event(&"ui_accept", accept)
+	var cancel := InputEventJoypadButton.new()
+	cancel.button_index = JOY_BUTTON_B
+	InputMap.action_add_event(&"ui_cancel", cancel)
 
 
 func _on_joy_connection_changed(device: int, connected: bool) -> void:

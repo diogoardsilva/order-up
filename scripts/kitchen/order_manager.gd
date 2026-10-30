@@ -17,22 +17,25 @@ var score := 0
 var delivered_count := 0
 var failed_count := 0
 var active := true
+## No tutorial os pedidos não aparecem sozinhos nem expiram.
+var scripted := false
 
 var _spawn := 0.0
 
 
 func _ready() -> void:
-	_add_order()
-	_add_order()
+	if not scripted:
+		add_order()
+		add_order()
 
 
 func _process(delta: float) -> void:
-	if not active:
+	if not active or scripted:
 		return
 	_spawn += delta
 	if orders.is_empty() or (_spawn >= SPAWN_EVERY and orders.size() < MAX_ORDERS):
 		_spawn = 0.0
-		_add_order()
+		add_order()
 	for order in orders.duplicate():
 		order["time_left"] -= delta
 		if order["time_left"] <= 0.0:
@@ -58,5 +61,5 @@ func deliver(contents: Array[String]) -> bool:
 	return false
 
 
-func _add_order() -> void:
-	orders.append({"recipe": Recipes.ALL.pick_random(), "time_left": ORDER_TIME})
+func add_order(recipe: Dictionary = Recipes.ALL.pick_random()) -> void:
+	orders.append({"recipe": recipe, "time_left": ORDER_TIME})
