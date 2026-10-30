@@ -14,6 +14,9 @@ static func draw_item(ci: CanvasItem, item: Item, at: Vector2) -> void:
 		return
 	ci.draw_circle(at, 9.0, PLATE_RIM)
 	ci.draw_circle(at, 8.0, PLATE)
+	if item.dirty:
+		for p in [Vector2(-3, -2), Vector2(2, 1), Vector2(-1, 3)]:
+			ci.draw_circle(at + p, 1.5, Color("8c6a4f"))
 	var n := item.contents.size()
 	for i in n:
 		var offset := Vector2.ZERO if n == 1 else Vector2(-3.0 + 6.0 * i, 0)

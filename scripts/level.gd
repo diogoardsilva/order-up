@@ -22,6 +22,7 @@ func _ready() -> void:
 	_kitchen = Kitchen.new(_orders)
 	_kitchen.position = KITCHEN_OFFSET
 	add_child(_kitchen)
+	_orders.kitchen = _kitchen
 
 	for p in PlayerRegistry.players:
 		var chef := Chef.new()
@@ -98,13 +99,13 @@ func _draw_hud() -> void:
 		var plate := Item.plate()
 		plate.contents.assign(order["recipe"]["needs"])
 		ItemArt.draw_item(_hud, plate, rect.position + Vector2(14, 15))
-		_hud.draw_string(font, rect.position + Vector2(27, 12), order["recipe"]["name"],
+		_hud.draw_string(font, rect.position + Vector2(27, 12), "%s · mesa %d" % [order["recipe"]["name"], order["table"]],
 			HORIZONTAL_ALIGNMENT_LEFT, 100, 9, UiStyle.TEXT)
 		_hud.draw_string(font, rect.position + Vector2(27, 23), order["recipe"]["hint"],
 			HORIZONTAL_ALIGNMENT_LEFT, 102, 7, UiStyle.MUTED)
 		if _tutorial:
 			continue
-		var t: float = order["time_left"] / OrderManager.ORDER_TIME
+		var t: float = order["time_left"] / order["max_time"]
 		var bar := Rect2(rect.position + Vector2(4, 28), Vector2(122, 4))
 		_hud.draw_rect(bar, UiStyle.BG)
 		_hud.draw_rect(Rect2(bar.position, Vector2(bar.size.x * t, 4)), Color("e8574d").lerp(Color("6fcf6a"), t))
@@ -122,7 +123,7 @@ func _draw_hud() -> void:
 		_hud.draw_rect(Rect2(Vector2.ZERO, Vector2(640, 360)), Color(0, 0, 0, 0.7))
 		var lines := [
 			["Tutorial concluído!", 28, UiStyle.TEXT],
-			["Já sabes fazer salada e sopa. Agora é a sério: 3 minutos e pedidos com tempo.", 10, UiStyle.TEXT],
+			["Já sabes cozinhar, servir às mesas e lavar pratos. Agora é a sério: 3 minutos e clientes impacientes.", 10, UiStyle.TEXT],
 			["Carrega em pegar para ir jogar", 10, UiStyle.MUTED],
 		] if _tutorial else [
 			["Fim do serviço!", 28, UiStyle.TEXT],

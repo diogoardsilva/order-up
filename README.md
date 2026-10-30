@@ -25,16 +25,18 @@ Usem a 4.7 (não a 4.3): o projeto foi feito para a 4.7.
 
 Os menus também se usam com o comando (D-pad ou analógico, Cruz para confirmar, Círculo para voltar). O DualShock 4 funciona por USB ou Bluetooth sem DS4Windows. Se tiverem o DS4Windows aberto, fechem-no para o comando não aparecer duas vezes.
 
-## Como se joga (protótipo M1)
+## Como se joga (protótipo M3)
 
-Na primeira vez que carregam em Jogar, o jogo começa por um tutorial guiado (uma salada e uma sopa, passo a passo). Depois de o terminarem, não volta a aparecer.
+Na primeira vez que carregam em Jogar, o jogo começa por um tutorial guiado. Depois de o terminarem, não volta a aparecer.
 
-Têm 3 minutos para servir o máximo de pedidos (aparecem no topo do ecrã).
+O restaurante tem a **cozinha** (esquerda) e o **salão** (direita). Têm 3 minutos para servir o máximo de clientes.
 
+- Os clientes entram pela porta, sentam-se e mostram num balão o que querem. A barra por baixo é a paciência: se acabar, saem zangados (-10 pontos).
 - **Salada**: alface cortada + tomate cortado num prato.
 - **Sopa de tomate**: 2 tomates cortados no fogão, esperar que coza, e recolher com um prato. Se ficar muito tempo, queima: esvaziem a panela com as mãos vazias.
 - Cortar: pousem o ingrediente na tábua e mantenham "usar".
-- Entreguem o prato na **SAÍDA**. Pedidos entregues mais cedo dão gorjeta; pedidos que expiram tiram 10 pontos.
+- Levem o prato à **mesa do cliente** e carreguem em pegar virados para a mesa. Quanto mais cedo, maior a gorjeta.
+- Há poucos pratos (4). Quando o cliente acaba de comer, deixa o prato sujo na mesa: levem-no ao **lava-loiça**, larguem-no e mantenham "usar" para lavar. Depois peguem no prato limpo.
 - O caixote do lixo deita fora ingredientes e esvazia pratos.
 
 A arte ainda é provisória (formas simples desenhadas por código).
