@@ -79,17 +79,28 @@ func _physics_process(delta: float) -> void:
 
 
 func _draw() -> void:
-	var half := SIZE / 2.0
-	draw_rect(Rect2(-half, -half + 3, SIZE, SIZE), Color(0, 0, 0, 0.25))
-	draw_rect(Rect2(-half, -half, SIZE, SIZE), color)
-	# Chapéu de chef.
-	draw_rect(Rect2(-half + 2, -half - 5, SIZE - 4, 6), Color("f4f0e8"))
-	draw_rect(Rect2(_facing.round() * 4 - Vector2(2, 1), Vector2(4, 3)), UiStyle.BG)
+	# Linha da folha: 0 = de frente, 1 = de costas, 2 = de lado (espelhado para a esquerda).
+	var side := absf(_facing.x) > absf(_facing.y)
+	var row := 2 if side else (1 if _facing.y < 0.0 else 0)
+	var flip := side and _facing.x < 0.0
+	var col := 0
+	if velocity.length() > 10.0:
+		col = 1 + int(Time.get_ticks_msec() / 120.0) % 2
+	var top_left := Vector2(-Art.CHEF_FRAME.x / 2.0, -Art.CHEF_FRAME.y + 8)
+	var hand := _facing.round() * 9 + Vector2(0, 2)
+
+	draw_circle(Vector2(0, 7), 6.0, Color(0, 0, 0, 0.25))
+	# De costas, o que leva na mão fica escondido atrás do corpo.
+	if held and row == 1:
+		ItemArt.draw_item(self, held, hand)
+	Art.frame(self, Art.CHEF, Art.CHEF_FRAME, col, row, top_left, flip)
+	Art.frame(self, Art.CHEF_TINT, Art.CHEF_FRAME, col, row, top_left, flip, color)
+	if held and row != 1:
+		ItemArt.draw_item(self, held, hand)
+
 	var font := ThemeDB.fallback_font
-	draw_string(font, Vector2(-half, -half - 7), "P%d" % (slot + 1), HORIZONTAL_ALIGNMENT_CENTER, SIZE, 8, UiStyle.TEXT)
-	if held:
-		ItemArt.draw_item(self, held, _facing.round() * 10)
+	draw_string(font, Vector2(-10, top_left.y - 2), "P%d" % (slot + 1), HORIZONTAL_ALIGNMENT_CENTER, 20, 8, color)
 	if _emote > 0.0:
-		draw_string(font, Vector2(-half, -half - 16), "!", HORIZONTAL_ALIGNMENT_CENTER, SIZE, 12, Color("f2c94c"))
+		draw_string(font, Vector2(-10, top_left.y - 10), "!", HORIZONTAL_ALIGNMENT_CENTER, 20, 12, Color("f2c94c"))
 	if not source.is_available():
-		draw_string(font, Vector2(-30, half + 10), "comando desligado", HORIZONTAL_ALIGNMENT_CENTER, 60, 8, Color("e8574d"))
+		draw_string(font, Vector2(-30, 18), "comando desligado", HORIZONTAL_ALIGNMENT_CENTER, 60, 8, Color("e8574d"))

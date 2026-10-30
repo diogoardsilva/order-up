@@ -2,8 +2,8 @@ class_name OrderManager
 extends Node
 ## Clientes do salão, os pedidos deles, pontuação e falhas da ronda.
 
-signal delivered(points: int)
-signal failed
+signal delivered(points: int, at: Vector2)
+signal failed(at: Vector2)
 
 const MAX_CUSTOMERS := 4
 const PATIENCE := 70.0
@@ -36,7 +36,7 @@ func _process(delta: float) -> void:
 		if customer.tick(delta, active and not scripted):
 			score = maxi(score - FAIL_PENALTY, 0)
 			failed_count += 1
-			failed.emit()
+			failed.emit(kitchen.cell_center(customer.table.cell))
 		if customer.state == Customer.State.GONE:
 			customers.erase(customer)
 		# A comida chegou à mesa: o cliente começa a comer e paga.
@@ -62,7 +62,7 @@ func _pay(customer: Customer) -> void:
 	score += points
 	delivered_count += 1
 	customer.serve()
-	delivered.emit(points)
+	delivered.emit(points, kitchen.cell_center(customer.table.cell))
 
 
 func _refresh_orders() -> void:

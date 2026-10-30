@@ -18,11 +18,14 @@ func _init(p_kitchen: Kitchen, p_orders: OrderManager) -> void:
 	var board := func(s): return s is BoardStation
 	var plates := func(s): return s is PlateStation
 	var stove := func(s): return s is StoveStation
+	var calling_table := func(s): return s is TableStation and s.customer != null and s.customer.state <= Customer.State.CALLING
 	var waiting_table := func(s): return s is TableStation and s.customer != null and s.customer.state <= Customer.State.WAITING
 	var dirty_table := func(s): return s is TableStation and s.item != null and s.item.dirty
 	var sink := func(s): return s is SinkStation
 	steps = [
-		{"text": "Chegou um cliente ao salão. O balão por cima dele diz o que quer: uma salada. Vai à caixa de alfaces e carrega em {pick} para pegar numa.",
+		{"text": "Chegou um cliente ao salão! Quando aparecer o balão com \"!\", vai até à mesa dele e carrega em {pick} para anotar o pedido.",
+			"where": [calling_table], "done": func(): return orders.orders.size() >= 1},
+		{"text": "Pedido anotado: aparece em cima, no talão. Ele quer uma salada. Vai à caixa de alfaces e carrega em {pick} para pegar numa.",
 			"where": [lettuce], "done": func(): return _held_ids().has("lettuce")},
 		{"text": "Fica virado para uma tábua de cortar e carrega em {pick} para pousar a alface.",
 			"where": [board], "done": func(): return _board_ids().has("lettuce")},
@@ -36,7 +39,9 @@ func _init(p_kitchen: Kitchen, p_orders: OrderManager) -> void:
 			"where": [tomato, board], "done": func(): return _plate_matches("salad")},
 		{"text": "Salada pronta! Leva-a ao salão, fica virado para a mesa do cliente e carrega em {pick}.",
 			"where": [waiting_table], "done": func(): return orders.delivered_count >= 1},
-		{"text": "Chegou outro cliente, que quer sopa. Corta 2 tomates e põe-nos no fogão ({pick} virado para o fogão).",
+		{"text": "Chegou outro cliente. Vai à mesa dele anotar o pedido.",
+			"where": [calling_table], "done": func(): return orders.orders.size() >= 1},
+		{"text": "Ele quer sopa. Corta 2 tomates e põe-nos no fogão ({pick} virado para o fogão).",
 			"where": [tomato, board, stove], "done": func(): return _stoves().any(func(s): return s.state >= StoveStation.State.COOKING)},
 		{"text": "A sopa está a cozer. Quando estiver pronta, recolhe-a com um prato. Não a deixes queimar: se queimar, esvazia a panela com as mãos vazias.",
 			"where": [plates, stove], "done": func(): return _plate_has("soup")},
@@ -56,7 +61,7 @@ func is_finished() -> bool:
 func update() -> void:
 	while not is_finished() and steps[step]["done"].call():
 		step += 1
-		if step == 7:
+		if step == 8:
 			orders.spawn_customer(Recipes.ALL[1])
 	kitchen.hint_cells.clear()
 	if not is_finished():

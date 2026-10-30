@@ -1,9 +1,10 @@
 class_name Customer
 extends RefCounted
-## Um cliente no salão: entra pela porta, senta-se, pensa, pede, espera com a
-## paciência a descer, come e sai, deixando o prato sujo na mesa.
+## Um cliente no salão: entra pela porta, senta-se, pensa, chama um chef para
+## lhe anotar o pedido, espera com a paciência a descer, come e sai, deixando o
+## prato sujo na mesa.
 
-enum State { ARRIVING, THINKING, WAITING, EATING, LEAVING, GONE }
+enum State { ARRIVING, THINKING, CALLING, WAITING, EATING, LEAVING, GONE }
 
 const WALK_SPEED := 70.0
 const THINK_TIME := 1.5
@@ -35,8 +36,23 @@ func _init(p_table: TableStation, p_recipe: Dictionary, path: Array[Vector2], p_
 	pos = _path.pop_front()
 
 
+## Parado (não está a andar entre a porta e a mesa).
+func is_still() -> bool:
+	return _path.is_empty()
+
+
 func is_waiting() -> bool:
 	return state == State.WAITING
+
+
+## Está a chamar alguém para lhe anotar o pedido.
+func is_calling() -> bool:
+	return state == State.CALLING
+
+
+## Um chef foi à mesa anotar o pedido: passa a ser um talão.
+func take_order() -> void:
+	state = State.WAITING
 
 
 ## O jogador trouxe a comida certa.
@@ -54,8 +70,8 @@ func tick(delta: float, patience_runs: bool) -> bool:
 		State.THINKING:
 			_timer += delta
 			if _timer >= THINK_TIME:
-				state = State.WAITING
-		State.WAITING:
+				state = State.CALLING
+		State.CALLING, State.WAITING:
 			if patience_runs:
 				patience -= delta
 				if patience <= 0.0:

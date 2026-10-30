@@ -24,14 +24,8 @@ const LAYOUT: Array[String] = [
 	"CCCBBCCCSSCCCCCCCCCC",
 ]
 
-const FLOOR_A := Color("d9cfc1")
-const FLOOR_B := Color("cbbfae")
-const WOOD_A := Color("b58a63")
-const WOOD_B := Color("a97f5a")
 ## Coluna a partir da qual começa o salão.
 const DINING_FROM_X := 12
-const COUNTER := Color("a5815f")
-const COUNTER_EDGE := Color("7a5c43")
 
 var stations := {}  # Vector2i -> Station
 var spawns := {}  # slot -> Vector2
@@ -39,10 +33,16 @@ var chefs: Array[Chef] = []
 var orders: OrderManager
 ## Células assinaladas com uma seta (usado pelo tutorial).
 var hint_cells: Array[Vector2i] = []
+var particles := Particles.new()
 
 
 func _init(p_orders: OrderManager) -> void:
 	orders = p_orders
+	orders.delivered.connect(func(points: int, at: Vector2):
+		particles.sparkle(at)
+		particles.text(at + Vector2(0, -20), "+%d" % points, Color("f2c94c")))
+	orders.failed.connect(func(at: Vector2):
+		particles.text(at + Vector2(0, -20), "-%d" % OrderManager.FAIL_PENALTY, Color("e8574d")))
 	for y in LAYOUT.size():
 		for x in LAYOUT[y].length():
 			var c := LAYOUT[y][x]
@@ -99,7 +99,12 @@ func path_to_seat(table: TableStation) -> Array[Vector2]:
 
 func interact(chef: Chef, cell: Vector2i) -> void:
 	var station: Station = stations.get(cell)
-	if station:
+	if station is TableStation and (station as TableStation).customer != null \
+			and (station as TableStation).customer.is_calling():
+		# Anotar o pedido não precisa de mãos livres.
+		(station as TableStation).customer.take_order()
+		particles.text(cell_center(cell) + Vector2(0, -20), "Anotado!", Color("f2c94c"))
+	elif station:
 		chef.held = station.interact(chef.held)
 
 
@@ -112,130 +117,162 @@ func use(cell: Vector2i, delta: float) -> void:
 func _process(delta: float) -> void:
 	for station: Station in stations.values():
 		station.tick(delta)
+	_emit_ambient(delta)
+	particles.update(delta)
 	queue_redraw()
+
+
+## Fumo, vapor e suor que saem das estações e dos clientes.
+func _emit_ambient(delta: float) -> void:
+	for station: Station in stations.values():
+		var center := cell_center(station.cell)
+		if station is StoveStation:
+			var stove := station as StoveStation
+			if stove.state == StoveStation.State.COOKING and randf() < delta * 6.0:
+				particles.steam(center + Vector2(randf_range(-5, 5), -6))
+			elif stove.state == StoveStation.State.READY and stove.is_burning_soon() and randf() < delta * 10.0:
+				particles.smoke(center + Vector2(randf_range(-5, 5), -6), false)
+			elif stove.state == StoveStation.State.BURNT and randf() < delta * 8.0:
+				particles.smoke(center + Vector2(randf_range(-5, 5), -6), true)
+		elif station is BoardStation and station.progress() > 0.0 and randf() < delta * 12.0:
+			particles.chop(center, station.item)
+		elif station is SinkStation and station.progress() > 0.0 and randf() < delta * 10.0:
+			particles.bubble(center + Vector2(randf_range(-7, 7), randf_range(-3, 3)))
+	for customer in orders.customers:
+		if (customer.is_waiting() or customer.is_calling()) and customer.patience < customer.max_patience * 0.3 and randf() < delta * 3.0:
+			particles.sweat(customer.pos + Vector2(6, -14))
 
 
 func _draw() -> void:
 	var cols := LAYOUT[0].length()
 	for y in LAYOUT.size():
 		for x in cols:
-			var even := (x + y) % 2 == 0
-			# Salão com soalho de madeira, cozinha com mosaico.
-			var color := (WOOD_A if even else WOOD_B) if x >= DINING_FROM_X else (FLOOR_A if even else FLOOR_B)
-			draw_rect(Rect2(x * TILE, y * TILE, TILE, TILE), color)
+			draw_texture(Art.WOOD if x >= DINING_FROM_X else Art.FLOOR, Vector2(x, y) * TILE)
+	# Cadeiras primeiro, para os clientes sentados ficarem por cima.
+	for table in tables():
+		draw_texture(Art.CHAIR, Vector2(table.seat) * TILE)
 	for station: Station in stations.values():
 		_draw_station(station)
-	for customer in orders.customers:
-		_draw_customer(customer)
 	for chef in chefs:
 		var cell := chef.target_cell()
 		if stations.has(cell):
-			draw_rect(Rect2(Vector2(cell) * TILE, Vector2(TILE, TILE)).grow(-1), chef.color, false, 2.0)
+			draw_rect(Rect2(Vector2(cell) * TILE, Vector2(TILE, TILE)).grow(-1), chef.color, false, 1.0)
+	for customer in orders.customers:
+		_draw_customer(customer)
 	var bob := sin(Time.get_ticks_msec() / 150.0) * 2.0
 	for cell in hint_cells:
-		var tip := cell_center(cell) + Vector2(0, -TILE * 0.6 + bob)
+		var tip := (cell_center(cell) + Vector2(0, -TILE * 0.6 + bob)).round()
 		draw_colored_polygon(PackedVector2Array([tip, tip + Vector2(-6, -8), tip + Vector2(6, -8)]), Color("f2c94c"))
 		draw_polyline(PackedVector2Array([tip, tip + Vector2(-6, -8), tip + Vector2(6, -8), tip]), UiStyle.BG, 1.0)
+	particles.draw(self)
 
 
 func _draw_station(station: Station) -> void:
 	var rect := Rect2(Vector2(station.cell) * TILE, Vector2(TILE, TILE))
-	var center := rect.get_center()
-	draw_rect(rect, COUNTER_EDGE)
-	draw_rect(rect.grow(-2), COUNTER)
+	var center := rect.get_center() + Vector2(0, -3)  # tampo da bancada (sem a frente)
+	if station is TableStation:
+		_draw_table(station as TableStation, rect)
+	elif LAYOUT[station.cell.y][station.cell.x] == "E":
+		draw_texture(Art.DOOR, rect.position)
+	else:
+		draw_texture(Art.COUNTER, rect.position)
 
 	if station is CrateStation:
-		draw_rect(rect.grow(-4), Color("8c6a4f"))
-		var kind: Item.Kind = (station as CrateStation).ingredient
-		ItemArt.draw_content(self, Item.KIND_IDS[kind], center)
+		draw_texture(Art.CRATE, rect.position + Vector2(0, -2))
+		ItemArt.draw_content(self, Item.KIND_IDS[(station as CrateStation).ingredient], center + Vector2(0, -2))
 	elif station is BoardStation:
-		draw_rect(rect.grow(-4), Color("e2c79a"))
+		draw_texture(Art.BOARD, rect.position)
 	elif station is StoveStation:
 		_draw_stove(station as StoveStation, rect)
 	elif station is PlateStation:
-		var count: int = (station as PlateStation).count
-		for i in count:
-			draw_circle(center - Vector2(0, i * 2), 8.0, ItemArt.PLATE_RIM if i < count - 1 else ItemArt.PLATE)
+		for i in (station as PlateStation).count:
+			Art.centered(self, Art.PLATE, center - Vector2(0, i * 2))
 	elif station is SinkStation:
 		var sink := station as SinkStation
-		draw_rect(rect.grow(-3), Color("9fb8c8"))
-		draw_rect(rect.grow(-6), Color("5d8aa8"))
-		var font := ThemeDB.fallback_font
-		if sink.dirty > 0:
-			draw_string(font, rect.position + Vector2(2, 9), "%d" % sink.dirty, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color("8c6a4f"))
-		if sink.clean > 0:
-			draw_circle(center + Vector2(3, 3), 6.0, ItemArt.PLATE)
-			draw_string(font, rect.position + Vector2(14, 22), "%d" % sink.clean, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiStyle.BG)
-	elif station is TableStation:
-		_draw_table(station as TableStation, rect)
-	elif LAYOUT[station.cell.y][station.cell.x] == "E":
-		draw_rect(rect, Color("5a4a63"))
-		draw_rect(rect.grow(-3), Color("8c6a4f"))
-		draw_circle(center + Vector2(-5, 0), 1.5, Color("f2c94c"))
+		draw_texture(Art.SINK, rect.position)
+		for i in sink.dirty:
+			var plate := Item.plate()
+			plate.dirty = true
+			ItemArt.draw_item(self, plate, center + Vector2(-3, -i * 2))
+		for i in sink.clean:
+			Art.centered(self, Art.PLATE, rect.position + Vector2(18, 16 - i * 2))
 	elif station is TrashStation:
-		draw_rect(rect.grow(-4), Color("4a4a4a"))
-		draw_rect(rect.grow(-7), Color("2e2e2e"))
+		draw_texture(Art.TRASH, rect.position)
 
 	if station.item:
 		ItemArt.draw_item(self, station.item, center)
 	var p := station.progress()
 	if p >= 0.0:
 		var bar := Rect2(rect.position + Vector2(2, -6), Vector2(TILE - 4, 4))
-		draw_rect(bar, Color(0, 0, 0, 0.6))
-		draw_rect(Rect2(bar.position, Vector2(bar.size.x * p, bar.size.y)), Color("6fcf6a"))
+		draw_rect(bar, UiStyle.BG)
+		draw_rect(Rect2(bar.position + Vector2.ONE, Vector2((bar.size.x - 2) * p, bar.size.y - 2)), Color("6fcf6a"))
 
 
 func _draw_table(table: TableStation, rect: Rect2) -> void:
-	draw_rect(rect, Color("6b4f3a"))
-	draw_rect(rect.grow(-2), Color("f4f0e8"))
-	draw_rect(Rect2(rect.position + Vector2(2, rect.size.y - 6), Vector2(rect.size.x - 4, 4)), Color("e8574d"))
-	# Cadeira.
-	var seat := Rect2(Vector2(table.seat) * TILE, Vector2(TILE, TILE))
-	draw_rect(seat.grow(-6), Color("8c6a4f"))
-	draw_string(ThemeDB.fallback_font, rect.position + Vector2(2, 9), "%d" % table.number,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiStyle.MUTED)
+	draw_texture(Art.TABLE, rect.position)
+	draw_string(ThemeDB.fallback_font, rect.position + Vector2(3, 10), "%d" % table.number,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color("a8323a"))
 
 
 func _draw_customer(customer: Customer) -> void:
-	var at := customer.pos
-	draw_circle(at + Vector2(0, 3), 7.0, Color(0, 0, 0, 0.2))
-	draw_circle(at, 7.0, customer.color)
-	draw_circle(at + Vector2(0, -6), 4.0, Color("f1c27d"))
+	var seated := customer.state in [Customer.State.THINKING, Customer.State.CALLING, Customer.State.WAITING, Customer.State.EATING]
+	var col := 3 if seated else (0 if customer.is_still() else 1 + int(Time.get_ticks_msec() / 150.0) % 2)
+	var top_left := customer.pos - Vector2(Art.CUSTOMER_FRAME.x / 2.0, Art.CUSTOMER_FRAME.y - 6)
+	draw_circle(customer.pos + Vector2(0, 5), 5.0, Color(0, 0, 0, 0.2))
+	Art.frame(self, Art.CUSTOMER, Art.CUSTOMER_FRAME, col, 0, top_left)
+	Art.frame(self, Art.CUSTOMER_TINT, Art.CUSTOMER_FRAME, col, 0, top_left, false, customer.color)
 	var font := ThemeDB.fallback_font
+	var head := customer.pos + Vector2(0, -16)
 	match customer.state:
 		Customer.State.THINKING:
-			draw_string(font, at + Vector2(-12, -14), "...", HORIZONTAL_ALIGNMENT_CENTER, 24, 10, UiStyle.BG)
+			var dots := ".".repeat(1 + int(Time.get_ticks_msec() / 300.0) % 3)
+			draw_string(font, head + Vector2(-12, -2), dots, HORIZONTAL_ALIGNMENT_CENTER, 24, 12, UiStyle.BG)
+		Customer.State.CALLING:
+			# Balão a saltar com "!": falta alguém ir anotar o pedido.
+			var bubble_center := head + Vector2(0, -14 + roundf(sin(Time.get_ticks_msec() / 120.0)))
+			Art.centered(self, Art.BUBBLE, bubble_center)
+			draw_string(font, bubble_center + Vector2(-8, 4), "!", HORIZONTAL_ALIGNMENT_CENTER, 16, 14, Color("e8574d"))
+			_draw_patience(customer, bubble_center)
 		Customer.State.WAITING:
 			# Balão com o pedido e a paciência.
-			var bubble := Rect2(at + Vector2(-11, -36), Vector2(22, 22))
-			draw_rect(bubble, Color.WHITE)
+			var bubble_center := head + Vector2(0, -14)
+			Art.centered(self, Art.BUBBLE, bubble_center)
 			var plate := Item.plate()
 			plate.contents.assign(customer.recipe["needs"])
-			ItemArt.draw_item(self, plate, bubble.get_center())
-			var t := customer.patience / customer.max_patience
-			draw_rect(Rect2(bubble.position + Vector2(0, 23), Vector2(22, 3)), UiStyle.BG)
-			draw_rect(Rect2(bubble.position + Vector2(0, 23), Vector2(22 * t, 3)), Color("e8574d").lerp(Color("6fcf6a"), t))
+			ItemArt.draw_item(self, plate, bubble_center + Vector2(0, -1))
+			_draw_patience(customer, bubble_center)
 		Customer.State.LEAVING:
 			if customer.angry:
-				draw_string(font, at + Vector2(-12, -12), "!!", HORIZONTAL_ALIGNMENT_CENTER, 24, 12, Color("e8574d"))
+				draw_string(font, head + Vector2(-12, -2), "!!", HORIZONTAL_ALIGNMENT_CENTER, 24, 12, Color("e8574d"))
+
+
+func _draw_patience(customer: Customer, bubble_center: Vector2) -> void:
+	var t := customer.patience / customer.max_patience
+	var bar := Rect2((bubble_center + Vector2(-10, 13)).round(), Vector2(20, 3))
+	draw_rect(bar.grow(1), UiStyle.BG)
+	draw_rect(Rect2(bar.position, Vector2(bar.size.x * t, bar.size.y)), Color("e8574d").lerp(Color("6fcf6a"), t))
 
 
 func _draw_stove(stove: StoveStation, rect: Rect2) -> void:
-	var center := rect.get_center()
-	draw_rect(rect.grow(-3), Color("3a3a3a"))
-	draw_circle(center, 9.0, Color("5c5c5c"))
+	var center := rect.get_center() + Vector2(0, -3)
+	draw_rect(Rect2(rect.position + Vector2(2, 2), Vector2(TILE - 4, TILE - 9)), Color("4a4a52"))
+	# Chama quando está ao lume.
+	if stove.state in [StoveStation.State.COOKING, StoveStation.State.READY]:
+		var flicker := int(Time.get_ticks_msec() / 90.0) % 2
+		draw_rect(Rect2(center + Vector2(-7, 5 - flicker), Vector2(14, 2 + flicker)), Color("e0703f"))
+	Art.centered(self, Art.POT, center)
 	match stove.state:
 		StoveStation.State.FILLING, StoveStation.State.COOKING:
 			for i in stove.tomatoes:
-				ItemArt.draw_content(self, "tomato_chopped", center + Vector2(-3 + 6 * i, 0), 0.7)
+				ItemArt.draw_content(self, "tomato_chopped", center + Vector2(-3 + 6 * i, 0))
 		StoveStation.State.READY:
-			draw_circle(center, 7.0, ItemArt.SOUP)
+			ItemArt.draw_content(self, "soup", center)
 			# Alerta a piscar quando está quase a queimar.
 			if stove.is_burning_soon() and int(Time.get_ticks_msec() / 200.0) % 2 == 0:
 				draw_string(ThemeDB.fallback_font, rect.position + Vector2(0, -2), "!",
 					HORIZONTAL_ALIGNMENT_CENTER, TILE, 14, Color("e8574d"))
 		StoveStation.State.BURNT:
-			draw_circle(center, 7.0, Color("1e1a1a"))
+			draw_circle(center, 6.0, Color("1e1a1a"))
 
 
 func _make_station(c: String) -> Station:

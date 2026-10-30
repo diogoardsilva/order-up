@@ -31,7 +31,7 @@ Na primeira vez que carregam em Jogar, o jogo começa por um tutorial guiado. De
 
 O restaurante tem a **cozinha** (esquerda) e o **salão** (direita). Têm 3 minutos para servir o máximo de clientes.
 
-- Os clientes entram pela porta, sentam-se e mostram num balão o que querem. A barra por baixo é a paciência: se acabar, saem zangados (-10 pontos).
+- Os clientes entram pela porta, sentam-se e chamam com um balão "!". Vão à mesa e carreguem em pegar para **anotar o pedido** (não precisam de mãos livres). Só então o pedido aparece no talão. A barra por baixo do balão é a paciência e já conta enquanto esperam que lhes anotem o pedido: se acabar, saem zangados (-10 pontos).
 - **Salada**: alface cortada + tomate cortado num prato.
 - **Sopa de tomate**: 2 tomates cortados no fogão, esperar que coza, e recolher com um prato. Se ficar muito tempo, queima: esvaziem a panela com as mãos vazias.
 - Cortar: pousem o ingrediente na tábua e mantenham "usar".
@@ -39,7 +39,7 @@ O restaurante tem a **cozinha** (esquerda) e o **salão** (direita). Têm 3 minu
 - Há poucos pratos (4). Quando o cliente acaba de comer, deixa o prato sujo na mesa: levem-no ao **lava-loiça**, larguem-no e mantenham "usar" para lavar. Depois peguem no prato limpo.
 - O caixote do lixo deita fora ingredientes e esvazia pratos.
 
-A arte ainda é provisória (formas simples desenhadas por código).
+A pixel art é gerada por código: `python3 tools/make_sprites.py` desenha os sprites em `assets/sprites/` a partir de mapas de pixels em texto.
 
 ## Estrutura
 
