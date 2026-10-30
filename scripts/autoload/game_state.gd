@@ -3,12 +3,16 @@ extends Node
 ## opções guardadas (ecrã inteiro e volumes). F11 ou Alt+Enter troca o ecrã inteiro.
 
 enum Mode { PLAY, TUTORIAL }
+## Ajudante controlado pelo jogo.
+enum Helper { NONE, WAITER, COOK }
+const HELPER_NAMES: Array[String] = ["Sem ajudante", "Empregado de mesa", "Cozinheiro"]
 
 const SAVE_PATH := "user://save.cfg"
 
 var mode := Mode.PLAY
 ## Restaurante escolhido (índice em Levels.ALL).
 var level := 0
+var helper := Helper.WAITER
 var tutorial_done := false
 var last_ip := ""
 ## Mensagem a mostrar no menu (ex. ligação perdida).

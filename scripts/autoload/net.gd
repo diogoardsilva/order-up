@@ -75,19 +75,20 @@ func open_level_select() -> void:
 
 
 ## O anfitrião mudou o restaurante selecionado.
-signal level_choice_changed(index: int)
+signal level_choice_changed(index: int, helper: int)
 
 
 @rpc("authority", "call_remote", "reliable")
-func set_level_choice(index: int) -> void:
-	level_choice_changed.emit(index)
+func set_level_choice(index: int, helper: int) -> void:
+	level_choice_changed.emit(index, helper)
 
 
 @rpc("authority", "call_local", "reliable")
-func start_level(level: int) -> void:
+func start_level(level: int, helper: int) -> void:
 	in_game = true
 	GameState.mode = GameState.Mode.PLAY
 	GameState.level = level
+	GameState.helper = helper as GameState.Helper
 	Transition.go("res://scenes/level.tscn")
 
 

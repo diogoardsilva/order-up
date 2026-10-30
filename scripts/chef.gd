@@ -7,6 +7,7 @@ extends CharacterBody2D
 signal pause_requested
 signal confirm_pressed
 signal interact_requested
+signal throw_requested
 
 const SIZE := 16.0
 const SPEED := 120.0
@@ -126,6 +127,8 @@ func _local_update(delta: float) -> void:
 	use_down = source.is_down(&"use")
 	if source.just_pressed(&"pick"):
 		interact_requested.emit()
+	if source.just_pressed(&"throw") and held != null and held.is_ingredient():
+		throw_requested.emit()
 	if source.just_pressed(&"emote"):
 		emote_left = EMOTE_TIME
 

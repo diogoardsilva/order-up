@@ -46,7 +46,7 @@ func _init(p_kitchen: Kitchen, p_orders: OrderManager) -> void:
 			"where": [calling_table], "done": func(): return orders.orders.size() >= 1},
 		{"text": "Ele quer sopa. Corta 2 tomates e põe-nos no fogão ({pick} virado para o fogão).",
 			"where": [tomato, board, stove], "done": func(): return _stoves().any(func(s): return s.state >= StoveStation.State.COOKING)},
-		{"text": "A sopa está a cozer. Quando estiver pronta, recolhe-a com um prato. Não a deixes queimar: se queimar, esvazia a panela com as mãos vazias.",
+		{"text": "A sopa está a cozer. Quando estiver pronta, recolhe-a com um prato. Não a deixes queimar: se queimar, pega na panela (mãos vazias) e despeja-a no lixo.",
 			"where": [plates, stove], "done": func(): return _plate_has("soup")},
 		{"text": "Leva a sopa à mesa do cliente.",
 			"where": [waiting_table], "done": func(): return orders.delivered_count >= 2},

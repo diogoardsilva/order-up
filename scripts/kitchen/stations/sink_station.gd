@@ -49,3 +49,7 @@ func _set_extra(extra: Variant) -> void:
 
 func progress() -> float:
 	return _wash / WASH_TIME if _wash > 0.0 else -1.0
+
+
+func catch(_thrown: Item) -> bool:
+	return false

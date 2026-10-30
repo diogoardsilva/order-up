@@ -20,7 +20,8 @@ Usem a 4.7 (não a 4.3): o projeto foi feito para a 4.7.
 | Entrar no lobby / pegar | Espaço | Enter | Cruz |
 | Usar estação (manter, ex. cortar) | E | . | Quadrado |
 | Dash / sair do lobby | Shift | - | Círculo |
-| Emote | Q | , | Triângulo |
+| Atirar ingrediente | Q | , | Triângulo |
+| Emote | R | M | L1 |
 | Começar / pausa | Esc | Backspace | Options |
 
 Os menus também se usam com o comando (D-pad ou analógico, Cruz para confirmar, Círculo para voltar). O DualShock 4 funciona por USB ou Bluetooth sem DS4Windows. Se tiverem o DS4Windows aberto, fechem-no para o comando não aparecer duas vezes.
@@ -47,7 +48,11 @@ O restaurante tem a **cozinha** (esquerda) e o **salão** (direita). Têm 3 minu
 - Fogão: juntem os ingredientes da receita (ex. bacalhau e batata cortados + ovo para o Bacalhau à Brás). Quando estão todos, coze; tirem com um prato antes de queimar. Com as mãos vazias tiram o último ingrediente (para emendar enganos) ou esvaziam o que queimou.
 - Levem cada prato à mesa e carreguem em pegar virados para ela. Quando a mesa tem tudo, comem.
 - Depois de comer, um do grupo vai **pagar à caixa registadora** e os outros saem. Fiquem virados para a caixa e mantenham "usar" para cobrar. Quanto mais depressa os serviram, maior a gorjeta.
-- Os pratos sujos ficam na mesa. Podem **levar dois pratos de uma vez** (sujos ou limpos e vazios). No lava-loiça larguem-nos e mantenham "usar" para lavar.
+- Podem levar **dois pratos com comida** de uma vez (peguem num e depois no outro) e **até quatro pratos vazios ou sujos**. Os pratos sujos ficam na mesa; no lava-loiça larguem-nos e mantenham "usar" para lavar.
+- A cozinha tem duas zonas iguais, em cima e em baixo, com os ingredientes ao meio, para dois cozinheiros trabalharem ao mesmo tempo.
+- As panelas e frigideiras tiram-se do fogão (mãos vazias) para servir noutro lado ou deitar fora o que queimou; só cozem em cima do fogão. Com uma panela ou um prato na mão, as caixas de ingredientes metem o ingrediente direto lá dentro.
+- **Atirar**: com um ingrediente na mão, Triângulo atira-o em frente. Cai numa bancada, numa tábua, numa panela ou no lixo; outro chef de mãos vazias apanha-o no ar; se cair no chão, apanha-se com pegar.
+- **Ajudante**: no ecrã do restaurante, cima/baixo escolhe um ajudante controlado pelo jogo. O empregado de mesa anota pedidos, leva os pratos prontos às mesas, cobra e lava a loiça. O cozinheiro prepara os pedidos dos talões e deixa os pratos numa bancada.
 - O caixote do lixo deita fora ingredientes e esvazia pratos.
 - As melhores estrelas de cada restaurante ficam guardadas.
 

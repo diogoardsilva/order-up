@@ -27,17 +27,29 @@ func has_dirty() -> bool:
 
 func interact(held: Item) -> Item:
 	if held == null:
-		# Só se levantam os pratos sujos depois de o grupo sair.
+		# Só se levantam os pratos sujos depois de o grupo sair (todos de uma vez, até 4).
 		if has_dirty():
-			return items.pop_back()
+			var taken: Item = items.pop_back()
+			while has_dirty() and taken.can_stack(items.back()):
+				taken.stack += items.pop_back().stack
+			return taken
 		return null
-	# Com um prato sujo na mão, leva-se mais um desta mesa.
+	# Com pratos sujos na mão, levam-se também os desta mesa.
 	if has_dirty() and held.can_stack(items.back()):
-		held.stack += items.pop_back().stack
+		while has_dirty() and held.can_stack(items.back()):
+			held.stack += items.pop_back().stack
 		return held
-	if customer != null and customer.is_waiting() and held.is_plate() and customer.wants(held):
-		items.append(held)
-		return null
+	if customer != null and customer.is_waiting() and held.is_plate():
+		# Com dois pratos na mão, entrega o que fizer falta.
+		if customer.wants(held):
+			var rest := held.second
+			held.second = null
+			items.append(held)
+			return rest
+		if held.second and customer.wants(held.second):
+			items.append(held.second)
+			held.second = null
+			return held
 	return held
 
 
@@ -50,3 +62,7 @@ func _set_extra(extra: Variant) -> void:
 	if extra != null:
 		for d in extra:
 			items.append(Item.deserialize(d))
+
+
+func catch(_thrown: Item) -> bool:
+	return false

@@ -10,9 +10,13 @@ const WORLD_SCALE := 2.0
 ## Frames de física entre envios (60 / 3 = 20 por segundo).
 const NET_SEND_EVERY := 3
 const TICKET_SIZE := Vector2(146, 114)
+## Lugar do ajudante (os jogadores são 0 a 3).
+const HELPER_SLOT := 4
 
 var _orders: OrderManager
 var _level: Dictionary
+var _vignette: Texture2D
+var _got_snapshot := false
 var _kitchen: Kitchen
 var _hud: Control
 var _time_left := ROUND_TIME
@@ -46,6 +50,10 @@ func _ready() -> void:
 	_kitchen.scale = Vector2.ONE * WORLD_SCALE
 	add_child(_kitchen)
 	_orders.kitchen = _kitchen
+	# Um pouco mais escuro e quente, para as luzes se notarem.
+	var tint := CanvasModulate.new()
+	tint.color = Color(0.93, 0.88, 0.84)
+	add_child(tint)
 	if Net.is_client():
 		_orders.process_mode = Node.PROCESS_MODE_DISABLED
 		_kitchen.simulate = false
@@ -66,8 +74,11 @@ func _ready() -> void:
 		chef.pause_requested.connect(_on_pause)
 		chef.confirm_pressed.connect(_on_confirm)
 		chef.interact_requested.connect(_on_interact.bind(chef))
+		chef.throw_requested.connect(_on_throw.bind(chef))
 		_kitchen.add_child(chef)
 		_kitchen.chefs.append(chef)
+	if GameState.helper != GameState.Helper.NONE and not _orders.scripted:
+		_add_helper()
 
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -113,6 +124,10 @@ func _physics_process(delta: float) -> void:
 		for peer in _ready_peers:
 			_rpc_snapshot.rpc_id(peer, snapshot)
 	else:
+		# Até chegar o primeiro estado, avisa o anfitrião de que está pronto (o
+		# primeiro aviso pode chegar antes de o nível dele existir).
+		if not _got_snapshot and _net_frame % 30 == 0:
+			_rpc_client_ready.rpc_id(1)
 		for chef in _kitchen.chefs:
 			if chef.is_local:
 				_rpc_chef_state.rpc_id(1, chef.slot, chef.position, chef.facing, chef.use_down, chef.emote_left)
@@ -167,6 +182,21 @@ func _stars() -> int:
 
 func _draw_hud() -> void:
 	var font := UiStyle.FONT
+	# Vinheta: cantos mais escuros.
+	if _vignette == null:
+		var g := Gradient.new()
+		g.set_color(0, Color(0, 0, 0, 0))
+		g.set_color(1, Color(0.08, 0.03, 0.03, 0.55))
+		g.add_point(0.6, Color(0, 0, 0, 0))
+		var tex := GradientTexture2D.new()
+		tex.gradient = g
+		tex.fill = GradientTexture2D.FILL_RADIAL
+		tex.fill_from = Vector2(0.5, 0.5)
+		tex.fill_to = Vector2(1.05, 0.5)
+		tex.width = 128
+		tex.height = 72
+		_vignette = tex
+	_hud.draw_texture_rect(_vignette, Rect2(Vector2.ZERO, Vector2(1280, 720)), false)
 	_draw_tickets()
 	_draw_players()
 	if not _tutorial:
@@ -259,7 +289,7 @@ func _draw_players() -> void:
 		Art.frame(_hud, Art.CHEFS[chef.character], Art.CHEF_FRAME, 0, 0, Vector2.ZERO)
 		Art.frame(_hud, Art.CHEF_TINT, Art.CHEF_FRAME, 0, 0, Vector2.ZERO, false, chef.color)
 		_hud.draw_set_transform(Vector2.ZERO)
-		_hud.draw_string(UiStyle.FONT, rect.position + Vector2(0, 104), "P%d %s" % [chef.slot + 1, Art.CHEF_NAMES[chef.character]],
+		_hud.draw_string(UiStyle.FONT, rect.position + Vector2(0, 104), ("Ajudante" if chef.slot == HELPER_SLOT else "P%d %s" % [chef.slot + 1, Art.CHEF_NAMES[chef.character]]),
 			HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 16, chef.color.darkened(0.35))
 		y += 122
 
@@ -310,15 +340,51 @@ func _on_interact(chef: Chef) -> void:
 		_kitchen.interact(chef, chef.target_cell())
 
 
+func _on_throw(chef: Chef) -> void:
+	if Net.is_client():
+		_rpc_throw.rpc_id(1, chef.slot, chef.position, chef.facing)
+	elif not chef.frozen:
+		_kitchen.throw_item(chef)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _rpc_throw(slot: int, pos: Vector2, dir: Vector2) -> void:
+	var chef := _remote_chef(slot)
+	if chef and not chef.frozen:
+		chef.position = pos
+		chef.net_target = pos
+		chef.facing = dir
+		_kitchen.throw_item(chef)
+
+
 func _on_pause() -> void:
 	if Net.is_host():
 		_back_to_lobby()
 
 
 ## Um jogador saiu da sala: o chef dele desaparece.
+## O ajudante controlado pelo jogo (empregado de mesa ou cozinheiro). Só o
+## anfitrião o faz pensar; nos outros PCs segue as posições recebidas.
+func _add_helper() -> void:
+	var waiter := GameState.helper == GameState.Helper.WAITER
+	var chef := Chef.new()
+	chef.slot = HELPER_SLOT
+	chef.color = Color("9aa4b4")
+	chef.character = 2 if waiter else 4
+	chef.kitchen = _kitchen
+	chef.position = _kitchen.cell_center(Vector2i(15, 5) if waiter else Vector2i(9, 9))
+	chef.is_local = not Net.is_client()
+	var brain := HelperAI.new(HelperAI.Role.WAITER if waiter else HelperAI.Role.COOK, chef, _kitchen, _orders)
+	chef.source = BotSource.new(brain)
+	chef.interact_requested.connect(_on_interact.bind(chef))
+	chef.throw_requested.connect(_on_throw.bind(chef))
+	_kitchen.add_child(chef)
+	_kitchen.chefs.append(chef)
+
+
 func _on_players_changed() -> void:
 	for chef in _kitchen.chefs.duplicate():
-		if PlayerRegistry.get_player(chef.slot).is_empty():
+		if chef.slot != HELPER_SLOT and PlayerRegistry.get_player(chef.slot).is_empty():
 			_kitchen.chefs.erase(chef)
 			chef.queue_free()
 
@@ -331,7 +397,7 @@ func _snapshot() -> Array:
 		var data: Variant = station.serialize()
 		if data != null:
 			stations.append([station.cell, data])
-	return [chefs, stations, _orders.serialize(), _time_left, _finished]
+	return [chefs, stations, _orders.serialize(), _time_left, _finished, _kitchen.serialize_loose()]
 
 
 func _chef_for_slot(slot: int) -> Chef:
@@ -384,6 +450,7 @@ func _rpc_fx(at: Vector2, text: String, color: Color, sparkle: bool) -> void:
 
 @rpc("authority", "call_remote", "unreliable_ordered")
 func _rpc_snapshot(data: Array) -> void:
+	_got_snapshot = true
 	for c in data[0]:
 		var chef := _chef_for_slot(c[0])
 		if chef == null:
@@ -400,6 +467,7 @@ func _rpc_snapshot(data: Array) -> void:
 	for station: Station in _kitchen.stations.values():
 		station.apply(by_cell.get(station.cell))
 	_orders.apply(data[2])
+	_kitchen.apply_loose(data[5])
 	_time_left = data[3]
 	if data[4] and not _finished:
 		_finish()

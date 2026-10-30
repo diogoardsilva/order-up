@@ -35,3 +35,7 @@ func _set_extra(extra: Variant) -> void:
 
 func progress() -> float:
 	return _pay / PAY_TIME if _pay > 0.0 else -1.0
+
+
+func catch(_thrown: Item) -> bool:
+	return false

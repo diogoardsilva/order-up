@@ -3,7 +3,7 @@ extends RefCounted
 ## Fonte de input abstrata. O Chef só fala com isto, nunca diretamente com o
 ## teclado ou o comando, para que local e online (M2) usem o mesmo código.
 
-const ACTIONS: Array[StringName] = [&"pick", &"use", &"dash", &"emote", &"pause"]
+const ACTIONS: Array[StringName] = [&"pick", &"use", &"dash", &"throw", &"emote", &"pause"]
 
 var move := Vector2.ZERO
 var _down := {}

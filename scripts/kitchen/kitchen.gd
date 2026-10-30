@@ -29,6 +29,15 @@ var register: RegisterStation
 var level: Dictionary
 ## Células extra de estações que ocupam mais de uma (mesa de 4) -> célula principal.
 var _alias := {}
+## Ingredientes atirados no ar: {"item", "pos", "vel", "dist", "slot"}.
+var thrown: Array[Dictionary] = []
+var _lights: Node2D
+var _light_tex: Texture2D
+## Ingredientes caídos no chão: {"item", "pos"}.
+var floor_items: Array[Dictionary] = []
+
+const THROW_SPEED := 260.0
+const THROW_RANGE := TILE * 5.0
 var orders: OrderManager
 ## Só o anfitrião faz as estações avançar (cozinhar, queimar).
 var simulate := true
@@ -77,13 +86,70 @@ func _init(p_orders: OrderManager, p_level: Dictionary = Levels.ALL[0]) -> void:
 				if station is TableStation:
 					(station as TableStation).cells = [cell]
 					station.seats.assign([cell + Vector2i.LEFT, cell + Vector2i.RIGHT])
+				if station is StoveStation:
+					station.item = Item.cookware(level.get("stove", "pot"))
 				if station is RegisterStation:
 					(station as RegisterStation).orders = orders
 					register = station
+	_make_lights()
 	var number := 1
 	for table in tables():
 		table.number = number
 		number += 1
+
+
+## Luzes por cima de tudo (soma de cor): candeeiros das mesas, janelas e o
+## brilho dos fogões. Uma textura de gradiente feita em código, leve para PCs fracos.
+func _make_lights() -> void:
+	var gradient := Gradient.new()
+	gradient.set_color(0, Color(1, 1, 1, 1))
+	gradient.set_color(1, Color(1, 1, 1, 0))
+	var tex := GradientTexture2D.new()
+	tex.gradient = gradient
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(1.0, 0.5)
+	tex.width = 64
+	tex.height = 64
+	_light_tex = tex
+	_lights = Node2D.new()
+	_lights.z_index = 50
+	var mat := CanvasItemMaterial.new()
+	mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	_lights.material = mat
+	_lights.draw.connect(_draw_lights)
+	add_child(_lights)
+
+
+func _draw_lights() -> void:
+	var warm := Color(1.0, 0.72, 0.4)
+	var flicker := 0.9 + 0.1 * sin(_time * 7.0) * sin(_time * 3.1)
+	for table in tables():
+		var center := (cell_center(table.cells[0]) + cell_center(table.cells.back())) / 2.0
+		_light(center, 56.0, Color(warm, 0.22 * flicker))
+	_light(cell_center(register.cell), 30.0, Color(warm, 0.14))
+	# Raios de sol das janelas, em diagonal pelo chão do salão.
+	for d in DECOR:
+		if d[0] == "wall_deco":
+			var p: Vector2 = d[1] + Vector2(2, 14)
+			var ray := PackedVector2Array([p, p + Vector2(16, 0), p + Vector2(52, 96), p + Vector2(28, 96)])
+			_lights.draw_colored_polygon(ray, Color(1.0, 0.95, 0.75, 0.07))
+	# Brilho alaranjado dos fogões ao lume.
+	for station: Station in stations.values():
+		if station is StoveStation and (station as StoveStation).state in [StoveStation.State.COOKING, StoveStation.State.READY]:
+			_light(cell_center(station.cell), 22.0, Color(1.0, 0.45, 0.15, 0.22 * flicker))
+
+
+func _light(at: Vector2, radius: float, color: Color) -> void:
+	_lights.draw_texture_rect(_light_tex, Rect2(at - Vector2(radius, radius), Vector2(radius, radius) * 2.0), false, color)
+
+
+## Candeeiro pendurado por cima de cada mesa (desenhado por cima dos clientes).
+func _draw_lamp(center: Vector2) -> void:
+	var top := (center + Vector2(0, -22)).round()
+	draw_line(top + Vector2(0, -12), top, Color(0.15, 0.08, 0.06, 0.6), 1.0)
+	draw_colored_polygon(PackedVector2Array([top + Vector2(-5, 4), top + Vector2(5, 4), top + Vector2(3, 0), top + Vector2(-3, 0)]), Color("2f5a4a"))
+	draw_rect(Rect2(top + Vector2(-2, 4), Vector2(4, 1)), Color("ffe6a0"))
 
 
 func pixel_size() -> Vector2:
@@ -167,8 +233,87 @@ func path_from_register(index: int) -> Array[Vector2]:
 		cell_center(Vector2i(door.x - 1, door.y)), cell_center(door)]
 
 
+## Atirar o ingrediente que o chef tem na mão, na direção para onde está virado.
+func throw_item(chef: Chef) -> void:
+	if chef.held == null or not chef.held.is_ingredient():
+		return
+	var dir := Vector2(signf(chef.facing.x), 0) if absf(chef.facing.x) > absf(chef.facing.y) else Vector2(0, signf(chef.facing.y))
+	thrown.append({"item": chef.held, "pos": chef.position + dir * 8.0, "vel": dir * THROW_SPEED, "dist": 0.0, "slot": chef.slot})
+	chef.held = null
+	_sfx("dash", -6.0, 0.2)
+
+
+func _update_thrown(delta: float) -> void:
+	for t in thrown.duplicate():
+		var step: Vector2 = t["vel"] * delta
+		t["pos"] += step
+		t["dist"] += step.length()
+		var pos: Vector2 = t["pos"]
+		# Outro chef de mãos vazias apanha-o no ar.
+		for chef in chefs:
+			if chef.slot != t["slot"] and chef.held == null and not chef.frozen and chef.position.distance_to(pos) < 12.0:
+				chef.held = t["item"]
+				thrown.erase(t)
+				break
+		if not thrown.has(t):
+			continue
+		var station := station_at(cell_at(pos))
+		if station:
+			var wall: bool = station.cell.x >= DINING_FROM_X - 1 and station.get_script() == Station
+			if not wall and not station is TableStation and station.catch(t["item"]):
+				_sfx("drop", -4.0)
+			else:
+				floor_items.append({"item": t["item"], "pos": pos - (t["vel"] as Vector2).normalized() * 10.0})
+			thrown.erase(t)
+		elif t["dist"] >= THROW_RANGE:
+			floor_items.append({"item": t["item"], "pos": pos})
+			_sfx("drop", -6.0)
+			thrown.erase(t)
+
+
+## Ingrediente caído no chão perto de um ponto (ou -1).
+func _floor_item_near(at: Vector2) -> int:
+	var best := -1
+	var best_d := 16.0
+	for i in floor_items.size():
+		var d: float = (floor_items[i]["pos"] as Vector2).distance_to(at)
+		if d < best_d:
+			best = i
+			best_d = d
+	return best
+
+
+func serialize_loose() -> Array:
+	return [thrown.map(func(t): return [Item.serialize(t["item"]), t["pos"], t["dist"]]),
+		floor_items.map(func(f): return [Item.serialize(f["item"]), f["pos"]])]
+
+
+func apply_loose(data: Array) -> void:
+	thrown.clear()
+	for t in data[0]:
+		thrown.append({"item": Item.deserialize(t[0]), "pos": t[1], "vel": Vector2.ZERO, "dist": t[2], "slot": -1})
+	floor_items.clear()
+	for f in data[1]:
+		floor_items.append({"item": Item.deserialize(f[0]), "pos": f[1]})
+
+
 func interact(chef: Chef, cell: Vector2i) -> void:
 	var station := station_at(cell)
+	if station == null:
+		# Apanhar do chão o que caiu.
+		var i := _floor_item_near(chef.position + chef.facing.normalized() * 12.0)
+		if i < 0:
+			i = _floor_item_near(chef.position)
+		if i >= 0:
+			var item: Item = floor_items[i]["item"]
+			if chef.held == null:
+				chef.held = item
+				floor_items.remove_at(i)
+			elif chef.held.is_plate() and chef.held.try_add(item.content_id()):
+				floor_items.remove_at(i)
+			elif chef.held.is_cookware() and chef.held.cook_add(item.content_id()):
+				floor_items.remove_at(i)
+		return
 	if station is TableStation and (station as TableStation).customer != null \
 			and (station as TableStation).customer.is_calling():
 		# Anotar o pedido não precisa de mãos livres.
@@ -207,6 +352,7 @@ func _process(delta: float) -> void:
 	if simulate:
 		for station: Station in stations.values():
 			station.tick(delta)
+		_update_thrown(delta)
 	else:
 		# Nos outros PCs os clientes deslizam até à última posição recebida.
 		for customer in orders.customers:
@@ -215,6 +361,7 @@ func _process(delta: float) -> void:
 	_emit_ambient(delta)
 	particles.update(delta)
 	queue_redraw()
+	_lights.queue_redraw()
 
 
 ## Fumo, vapor e suor que saem das estações e dos clientes.
@@ -312,9 +459,22 @@ func _draw() -> void:
 				draw_rect(Rect2(Vector2(c) * TILE, Vector2(TILE, TILE)).grow(-1), chef.color, false, 1.0)
 		elif target:
 			draw_rect(Rect2(Vector2(cell) * TILE, Vector2(TILE, TILE)).grow(-1), chef.color, false, 1.0)
+	for f in floor_items:
+		draw_circle(f["pos"] + Vector2(0, 4), 4.0, Color(0, 0, 0, 0.2))
+		ItemArt.draw_item(self, f["item"], f["pos"])
+	for t in thrown:
+		# Voa num arco: a sombra fica no chão.
+		var h := sin(clampf(t["dist"] / THROW_RANGE, 0.0, 1.0) * PI) * 10.0
+		draw_circle(t["pos"] + Vector2(0, 4), 3.0, Color(0, 0, 0, 0.2))
+		ItemArt.draw_item(self, t["item"], t["pos"] - Vector2(0, h))
+	for table in tables():
+		_draw_lamp((cell_center(table.cells[0]) + cell_center(table.cells.back())) / 2.0 + Vector2(0, -float(table.cells.size() - 1) * 12.0))
 	for customer in orders.customers:
 		_draw_customer(customer)
 		_draw_customer_end()
+	# Sombra suave da parede do fundo sobre o chão.
+	for i in 4:
+		draw_rect(Rect2(Vector2(0, i * 2), Vector2(pixel_size().x, 2)), Color(0.15, 0.05, 0.03, 0.12 - i * 0.03))
 	var bob := sin(Time.get_ticks_msec() / 150.0) * 2.0
 	for cell in hint_cells:
 		var tip := (cell_center(cell) + Vector2(0, -TILE * 0.6 + bob)).round()
@@ -486,7 +646,7 @@ func _draw_patience(customer: Customer, bubble_center: Vector2) -> void:
 
 func _draw_stove(stove: StoveStation, rect: Rect2) -> void:
 	var center := rect.get_center() + Vector2(0, -3)
-	# Chamas à volta da panela quando está ao lume.
+	# Chamas à volta da panela quando está ao lume (a panela desenha-se como item).
 	if stove.state in [StoveStation.State.COOKING, StoveStation.State.READY]:
 		var t := Time.get_ticks_msec() / 90
 		for i in 5:
@@ -494,21 +654,10 @@ func _draw_stove(stove: StoveStation, rect: Rect2) -> void:
 			var x := center.x - 8 + i * 4
 			draw_rect(Rect2(Vector2(x, center.y + 7 - h), Vector2(2, h)), Color("f2a03a"))
 			draw_rect(Rect2(Vector2(x, center.y + 7 - 1), Vector2(2, 1)), Color("e0503a"))
-	var tool := stove.tool() if stove.tool() != "" else String(level.get("stove", "pot"))
-	Art.centered(self, Art.COOK_TOOLS[tool], center)
-	match stove.state:
-		StoveStation.State.FILLING, StoveStation.State.COOKING:
-			var n := stove.contents.size()
-			for i in n:
-				ItemArt.draw_content(self, stove.contents[i], center + Vector2((i - (n - 1) / 2.0) * 5.0, 0))
-		StoveStation.State.READY:
-			ItemArt.draw_content(self, stove.product, center)
-			# Alerta a piscar quando está quase a queimar.
-			if stove.is_burning_soon() and int(Time.get_ticks_msec() / 200.0) % 2 == 0:
-				draw_string(UiStyle.FONT, rect.position + Vector2(0, -2), "!",
-					HORIZONTAL_ALIGNMENT_CENTER, TILE, 14, Color("e8574d"))
-		StoveStation.State.BURNT:
-			draw_circle(center, 6.0, Color("1e1a1a"))
+	# Alerta a piscar quando está quase a queimar.
+	if stove.is_burning_soon() and int(Time.get_ticks_msec() / 200.0) % 2 == 0:
+		draw_string(UiStyle.FONT, rect.position + Vector2(0, -2), "!",
+			HORIZONTAL_ALIGNMENT_CENTER, TILE, 14, Color("e8574d"))
 
 
 func _make_station(c: String) -> Station:
