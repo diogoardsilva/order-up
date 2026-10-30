@@ -18,6 +18,11 @@ func interact(held: Item) -> Item:
 	if item == null:
 		item = held
 		return null
+	# Pegar no prato pousado por cima do que já se leva.
+	if held.can_stack(item):
+		held.stack += item.stack
+		item = null
+		return held
 	# Combinar ingrediente e prato, em qualquer das direções.
 	if item.is_plate() and not held.is_plate() and item.try_add(held.content_id()):
 		return null

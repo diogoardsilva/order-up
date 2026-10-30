@@ -68,10 +68,26 @@ func local_addresses() -> PackedStringArray:
 	return result
 
 
+## Todos vão para o ecrã de escolher o restaurante (o anfitrião escolhe).
 @rpc("authority", "call_local", "reliable")
-func start_level() -> void:
+func open_level_select() -> void:
+	Transition.go("res://scenes/level_select.tscn")
+
+
+## O anfitrião mudou o restaurante selecionado.
+signal level_choice_changed(index: int)
+
+
+@rpc("authority", "call_remote", "reliable")
+func set_level_choice(index: int) -> void:
+	level_choice_changed.emit(index)
+
+
+@rpc("authority", "call_local", "reliable")
+func start_level(level: int) -> void:
 	in_game = true
 	GameState.mode = GameState.Mode.PLAY
+	GameState.level = level
 	Transition.go("res://scenes/level.tscn")
 
 

@@ -1,9 +1,11 @@
 extends Control
-## Menu principal: o restaurante a funcionar por trás, a placa com o nome e os
+## Menu principal: o restaurante a funcionar por trás, o logótipo e os
 ## botões de madeira. Rato, teclado e comando navegam os botões.
 
-const SIGN := preload("res://assets/sprites/sign.png")
-const SIGN_SCALE := 3.0
+const CLOCHE := preload("res://assets/sprites/cloche.png")
+const TITLE := "Order Up!"
+const TITLE_SIZE := 118
+const TITLE_SIZE_BOX := Vector2(440, 210)
 ## Mesas que o "empregado invisível" do fundo serve, com um atraso.
 const DEMO_TAKE_AFTER := 1.2
 const DEMO_SERVE_AFTER := 3.5
@@ -27,7 +29,7 @@ func _ready() -> void:
 	Sfx.set_sizzle(0.0)
 	_build_background()
 
-	# Escurece a esquerda, onde ficam a placa e os botões.
+	# Escurece a esquerda, onde ficam o logótipo e os botões.
 	for i in 20:
 		var strip := ColorRect.new()
 		strip.color = Color(0.12, 0.05, 0.05, 0.9 * (1.0 - i / 20.0))
@@ -37,9 +39,9 @@ func _ready() -> void:
 		add_child(strip)
 
 	_sign = Control.new()
-	_sign.position = Vector2(60, 26)
-	_sign.size = SIGN.get_size() * SIGN_SCALE
-	_sign.pivot_offset = Vector2(_sign.size.x / 2.0, 0)
+	_sign.position = Vector2(40, 20)
+	_sign.size = TITLE_SIZE_BOX
+	_sign.pivot_offset = _sign.size / 2.0
 	_sign.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_sign.draw.connect(_draw_sign)
 	add_child(_sign)
@@ -97,7 +99,9 @@ func _build_background() -> void:
 	# O mesmo restaurante do jogo, com clientes a entrar e a ser servidos sozinhos.
 	_orders = OrderManager.new()
 	add_child(_orders)
-	_kitchen = Kitchen.new(_orders)
+	var level: Dictionary = Levels.ALL.pick_random()
+	_orders.menu = Levels.dishes(level)
+	_kitchen = Kitchen.new(_orders, level)
 	_kitchen.quiet = true
 	_kitchen.scale = Vector2(2, 2)
 	_kitchen.position = Vector2(320, 62)
@@ -108,7 +112,7 @@ func _build_background() -> void:
 	add_child(holder)
 	holder.add_child(_kitchen)
 	for i in 3:
-		_orders.spawn_customer(Recipes.ALL.pick_random())
+		_orders.spawn_group(_orders._random_order())
 
 
 func _build_options() -> VBoxContainer:
@@ -136,10 +140,23 @@ func _build_options() -> VBoxContainer:
 
 
 func _volume_row(text: String, value: float, on_change: Callable) -> Control:
+	# A linha fica com fundo e moldura dourada quando o slider tem o foco (comando/teclado).
+	var holder := PanelContainer.new()
+	var idle := StyleBoxFlat.new()
+	idle.bg_color = Color(0, 0, 0, 0)
+	idle.set_content_margin_all(6)
+	idle.set_border_width_all(3)
+	idle.border_color = Color(0, 0, 0, 0)
+	var focused := idle.duplicate() as StyleBoxFlat
+	focused.bg_color = Color(UiStyle.GOLD, 0.25)
+	focused.border_color = UiStyle.GOLD
+	focused.set_corner_radius_all(4)
+	holder.add_theme_stylebox_override("panel", idle)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
+	holder.add_child(row)
 	var label := UiStyle.label(text, 24, UiStyle.INK)
-	label.custom_minimum_size.x = 90
+	label.custom_minimum_size.x = 110
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	row.add_child(label)
 	var slider := HSlider.new()
@@ -163,9 +180,16 @@ func _volume_row(text: String, value: float, on_change: Callable) -> Control:
 	slider.add_theme_stylebox_override("grabber_area", fill)
 	slider.add_theme_stylebox_override("grabber_area_highlight", fill)
 	slider.value_changed.connect(on_change)
-	slider.focus_entered.connect(func(): Sfx.play("ui_move"))
+	slider.focus_entered.connect(func():
+		Sfx.play("ui_move")
+		holder.add_theme_stylebox_override("panel", focused)
+		label.text = "> " + text)
+	slider.focus_exited.connect(func():
+		holder.add_theme_stylebox_override("panel", idle)
+		label.text = text)
+	slider.mouse_entered.connect(slider.grab_focus)
 	row.add_child(slider)
-	return row
+	return holder
 
 
 func _refresh_options() -> void:
@@ -193,10 +217,12 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _intro() -> void:
-	# A placa cai do teto e os botões entram da esquerda um a um.
-	_sign.position.y = -260
-	var t := create_tween()
-	t.tween_property(_sign, "position:y", 26.0, 0.8).set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+	# O logótipo cresce com um salto e os botões aparecem um a um.
+	_sign.scale = Vector2(0.2, 0.2)
+	_sign.modulate.a = 0.0
+	var t := create_tween().set_parallel()
+	t.tween_property(_sign, "scale", Vector2.ONE, 0.6).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	t.tween_property(_sign, "modulate:a", 1.0, 0.25)
 	for i in _main_box.get_child_count():
 		var b: Control = _main_box.get_child(i)
 		if not b.visible:
@@ -214,7 +240,6 @@ func _pop(node: Control) -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
-	_sign.rotation = sin(_time * 1.1) * 0.03
 	_sign.queue_redraw()
 	_run_demo(delta)
 
@@ -227,30 +252,77 @@ func _run_demo(delta: float) -> void:
 			customer.take_order()
 			_kitchen.show_fx(_kitchen.cell_center(customer.table.cell), "Anotado!", UiStyle.GOLD)
 			t = 0.0
-		elif customer.is_waiting() and customer.table.item == null and t > DEMO_SERVE_AFTER:
+		elif customer.is_waiting() and t > DEMO_SERVE_AFTER:
 			var plate := Item.plate()
-			plate.contents.assign(customer.recipe["needs"])
-			customer.table.item = plate
+			plate.contents.assign(customer.missing()[0]["needs"])
+			customer.table.items.append(plate)
 			t = 0.0
 		elif not customer.is_calling() and not customer.is_waiting():
 			t = 0.0
 		# Pratos sujos desaparecem ao fim de um bocado para as mesas voltarem a encher.
 		_demo_timers[customer.id] = t
+	# ...e cobra na caixa.
+	var payer := _orders.front_of_queue()
+	if payer:
+		var t: float = _demo_timers.get(-1, 0.0) + delta
+		if t > DEMO_TAKE_AFTER:
+			_orders.charge(payer)
+			t = 0.0
+		_demo_timers[-1] = t
 	for table in _kitchen.tables():
-		if table.item and table.item.dirty and table.customer == null:
-			table.item = null
+		if table.has_dirty():
+			table.items.clear()
 	_orders.score = 0
 
 
+## Logótipo: campânula a abrir-se, "Order Up!" com letras a ondular e uma fita.
 func _draw_sign() -> void:
-	_sign.draw_texture_rect(SIGN, Rect2(Vector2.ZERO, _sign.size), false)
 	var font := UiStyle.FONT
 	var w := _sign.size.x
-	# Nome pintado na placa, com contorno escuro.
-	for o in [Vector2(-3, 0), Vector2(3, 0), Vector2(0, -3), Vector2(0, 3), Vector2(3, 3)]:
-		_sign.draw_string(font, Vector2(0, 118) + o, "Order Up!", HORIZONTAL_ALIGNMENT_CENTER, w, 84, UiStyle.INK)
-	_sign.draw_string(font, Vector2(0, 118), "Order Up!", HORIZONTAL_ALIGNMENT_CENTER, w, 84, UiStyle.GOLD)
-	_sign.draw_string(font, Vector2(0, 160), "um restaurante a quatro mãos", HORIZONTAL_ALIGNMENT_CENTER, w, 24, UiStyle.PAPER)
+	# Campânula com a tampa a levantar de vez em quando e vapor a sair.
+	var lift := maxf(0.0, sin(_time * 1.6)) ** 6 * 10.0
+	var cloche_size := CLOCHE.get_size() * 1.5
+	var cloche_at := Vector2(w / 2.0 - cloche_size.x / 2.0, -14)
+	_sign.draw_texture_rect(CLOCHE, Rect2(cloche_at + Vector2(0, -lift), cloche_size), false)
+	if lift > 1.0:
+		for i in 3:
+			var x := w / 2.0 - 12 + i * 12
+			var y := cloche_at.y + 40 - lift * 1.5 - i * 2
+			_sign.draw_rect(Rect2(Vector2(x, y), Vector2(4, 4)), Color(1, 1, 1, lift / 14.0))
+	# Letras: contorno grosso, sombra, lado em laranja (relevo) e frente dourada.
+	var total := font.get_string_size(TITLE, HORIZONTAL_ALIGNMENT_LEFT, -1, TITLE_SIZE).x
+	var x := (w - total) / 2.0
+	for i in TITLE.length():
+		var ch := TITLE[i]
+		var cw := font.get_string_size(ch, HORIZONTAL_ALIGNMENT_LEFT, -1, TITLE_SIZE).x
+		var base := Vector2(x, 140 + roundf(sin(_time * 2.4 - i * 0.55) * 4.0))
+		_sign.draw_string(font, base + Vector2(4, 12), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, TITLE_SIZE, Color(0, 0, 0, 0.35))
+		for o in [Vector2(-5, 0), Vector2(5, 0), Vector2(0, -5), Vector2(0, 9), Vector2(-4, -4), Vector2(4, -4), Vector2(-4, 8), Vector2(4, 8)]:
+			_sign.draw_string(font, base + o, ch, HORIZONTAL_ALIGNMENT_LEFT, -1, TITLE_SIZE, UiStyle.INK)
+		_sign.draw_string(font, base + Vector2(0, 5), ch, HORIZONTAL_ALIGNMENT_LEFT, -1, TITLE_SIZE, Color("d8642e"))
+		_sign.draw_string(font, base, ch, HORIZONTAL_ALIGNMENT_LEFT, -1, TITLE_SIZE, Color("ffd45a"))
+		x += cw
+	# Fita vermelha com o subtítulo.
+	var rw := 330.0
+	var rx := (w - rw) / 2.0
+	var ry := 162.0
+	var ink := UiStyle.INK
+	var dark := Color("8e2430")
+	for side in [-1, 1]:
+		var ex := rx - 26 if side < 0 else rx + rw - 4
+		var tail := PackedVector2Array([Vector2(ex, ry + 8), Vector2(ex + 30, ry + 8), Vector2(ex + 30, ry + 40),
+			Vector2(ex, ry + 40), Vector2(ex + (12 if side < 0 else 18), ry + 24)])
+		if side > 0:
+			tail = PackedVector2Array([Vector2(ex, ry + 8), Vector2(ex + 30, ry + 8), Vector2(ex + 12, ry + 24),
+				Vector2(ex + 30, ry + 40), Vector2(ex, ry + 40)])
+		_sign.draw_colored_polygon(tail, dark)
+		_sign.draw_polyline(tail + PackedVector2Array([tail[0]]), ink, 3.0)
+	var band := Rect2(rx, ry, rw, 34)
+	_sign.draw_rect(band, Color("d23a32"))
+	_sign.draw_rect(Rect2(band.position, Vector2(rw, 4)), Color("f2604a"))
+	_sign.draw_rect(Rect2(band.position + Vector2(0, 30), Vector2(rw, 4)), dark)
+	_sign.draw_rect(band, ink, false, 3.0)
+	_sign.draw_string(font, Vector2(rx, ry + 26), "um restaurante a quatro mãos", HORIZONTAL_ALIGNMENT_CENTER, rw, 26, UiStyle.PAPER)
 
 
 ## Na primeira vez que se joga, o jogo começa pelo tutorial.

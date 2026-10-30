@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b0vmalk1kya0r"
-path="res://.godot/imported/lettuce.png-c574e3b4cdf3ac638754111e39bd77e1.ctex"
+uid="uid://c3logdjvnw5lt"
+path="res://.godot/imported/pasta_cooked.png-ea5d809fbda149f26c960d3cee9dd50b.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/sprites/lettuce.png"
-dest_files=["res://.godot/imported/lettuce.png-c574e3b4cdf3ac638754111e39bd77e1.ctex"]
+source_file="res://assets/sprites/food/pasta_cooked.png"
+dest_files=["res://.godot/imported/pasta_cooked.png-ea5d809fbda149f26c960d3cee9dd50b.ctex"]
 
 [params]
 

@@ -2,10 +2,10 @@ class_name CrateStation
 extends Station
 ## Caixa de ingredientes infinita.
 
-var ingredient: Item.Kind
+var ingredient: String
 
 
-func _init(p_ingredient: Item.Kind) -> void:
+func _init(p_ingredient: String) -> void:
 	ingredient = p_ingredient
 
 

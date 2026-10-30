@@ -25,19 +25,31 @@ Usem a 4.7 (não a 4.3): o projeto foi feito para a 4.7.
 
 Os menus também se usam com o comando (D-pad ou analógico, Cruz para confirmar, Círculo para voltar). O DualShock 4 funciona por USB ou Bluetooth sem DS4Windows. Se tiverem o DS4Windows aberto, fechem-no para o comando não aparecer duas vezes.
 
-## Como se joga (protótipo M3)
+## Como se joga
 
 Na primeira vez que carregam em Jogar, o jogo começa por um tutorial guiado. Depois de o terminarem, não volta a aparecer.
 
+Depois do lobby escolhem o **restaurante** (esquerda/direita, pegar para começar). Cada um tem a decoração e os pratos do seu país:
+
+| Restaurante | País | Pratos |
+|---|---|---|
+| O Primeiro Dia | bairro | Salada, Sopa |
+| Tasca do Zé | Portugal | Bitoque, Bacalhau à Brás, Caldo Verde |
+| Sakura Sushi | Japão | Sashimi, Nigiri, Maki |
+| Rocket Diner | Estados Unidos | Hambúrguer, Cheeseburger, Batatas Fritas |
+| Trattoria Nonna | Itália | Pizza, Esparguete, Caprese |
+
 O restaurante tem a **cozinha** (esquerda) e o **salão** (direita). Têm 3 minutos para servir o máximo de clientes.
 
-- Os clientes entram pela porta, sentam-se e chamam com um balão "!". Vão à mesa e carreguem em pegar para **anotar o pedido** (não precisam de mãos livres). Só então o pedido aparece no talão. A barra por baixo do balão é a paciência e já conta enquanto esperam que lhes anotem o pedido: se acabar, saem zangados (-10 pontos).
-- **Salada**: alface cortada + tomate cortado num prato.
-- **Sopa de tomate**: 2 tomates cortados no fogão, esperar que coza, e recolher com um prato. Se ficar muito tempo, queima: esvaziem a panela com as mãos vazias.
+- Os clientes chegam em **grupos de 1 a 4** e sentam-se em mesas de 2 ou de 4. Quando aparece o balão "!", vão à mesa e carreguem em pegar para **anotar o pedido** (um prato por pessoa). Os pratos aparecem nos talões à esquerda, com a receita explicada.
+- Cada fase tem a sua paciência: um tempo para lhes anotarem o pedido e outro, maior, para a comida chegar. Se acabar, saem zangados (-10 pontos).
 - Cortar: pousem o ingrediente na tábua e mantenham "usar".
-- Levem o prato à **mesa do cliente** e carreguem em pegar virados para a mesa. Quanto mais cedo, maior a gorjeta.
-- Há poucos pratos (4). Quando o cliente acaba de comer, deixa o prato sujo na mesa: levem-no ao **lava-loiça**, larguem-no e mantenham "usar" para lavar. Depois peguem no prato limpo.
+- Fogão: juntem os ingredientes da receita (ex. bacalhau e batata cortados + ovo para o Bacalhau à Brás). Quando estão todos, coze; tirem com um prato antes de queimar. Com as mãos vazias tiram o último ingrediente (para emendar enganos) ou esvaziam o que queimou.
+- Levem cada prato à mesa e carreguem em pegar virados para ela. Quando a mesa tem tudo, comem.
+- Depois de comer, um do grupo vai **pagar à caixa registadora** e os outros saem. Fiquem virados para a caixa e mantenham "usar" para cobrar. Quanto mais depressa os serviram, maior a gorjeta.
+- Os pratos sujos ficam na mesa. Podem **levar dois pratos de uma vez** (sujos ou limpos e vazios). No lava-loiça larguem-nos e mantenham "usar" para lavar.
 - O caixote do lixo deita fora ingredientes e esvazia pratos.
+- As melhores estrelas de cada restaurante ficam guardadas.
 
 A pixel art é gerada por código: `python3 tools/make_sprites.py` desenha os sprites em `assets/sprites/`. Os sons e a música também: `python3 tools/make_sounds.py` escreve-os em `assets/audio/`. A fonte é a Jersey 15 (licença OFL, em `assets/fonts/`).
 
@@ -58,10 +70,10 @@ Como funciona: o PC do anfitrião manda na cozinha, nos clientes, nas mesas e no
 ## Estrutura
 
 ```
-scenes/            menu, lobby, nível
+scenes/            menu, lobby, escolha do restaurante, nível
 scripts/autoload/  DeviceManager (comandos/teclado), PlayerRegistry (jogadores 1-4), Net (online), GameState
 scripts/input/     InputSource e as variantes de teclado e comando
-scripts/kitchen/   cozinha, estações, itens, receitas e pedidos
+scripts/kitchen/   cozinha, estações, itens, receitas, restaurantes (levels.gd), clientes e pedidos
 scripts/           lógica das cenas e do chef
 ```
 

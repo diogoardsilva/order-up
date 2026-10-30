@@ -16,7 +16,7 @@ func interact(held: Item) -> Item:
 
 
 func use(delta: float) -> void:
-	if item == null or item.is_plate() or item.chopped:
+	if item == null or not item.can_chop():
 		return
 	_chop += delta
 	if _chop >= CHOP_TIME:

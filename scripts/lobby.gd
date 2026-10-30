@@ -86,12 +86,17 @@ func _process(_delta: float) -> void:
 				Net.leave()
 				Sfx.play("ui_back")
 				Transition.go("res://scenes/main_menu.tscn")
+			elif GameState.mode == GameState.Mode.TUTORIAL and not Net.online:
+				# O tutorial é sempre no primeiro restaurante.
+				Sfx.play("ui_confirm")
+				GameState.level = 0
+				Transition.go("res://scenes/level.tscn")
 			elif Net.online and Net.is_host():
 				Sfx.play("ui_confirm")
-				Net.start_level.rpc()
+				Net.open_level_select.rpc()
 			elif not Net.online:
 				Sfx.play("ui_confirm")
-				Transition.go("res://scenes/level.tscn")
+				Transition.go("res://scenes/level_select.tscn")
 			return
 
 

@@ -2,31 +2,34 @@ class_name Item
 extends RefCounted
 ## Algo que um chef pode segurar: um ingrediente ou um prato.
 
-enum Kind { TOMATO, LETTUCE, PLATE }
+const PLATE := "plate"
+## Quantos pratos vazios se levam de uma vez.
+const MAX_STACK := 2
 
-const KIND_IDS := ["tomato", "lettuce", "plate"]
-
-var kind: Kind
+## "plate" ou o id do ingrediente cru, ex. "tomato".
+var kind: String
 var chopped := false
 ## Só para pratos: veio de uma mesa e tem de ser lavado.
 var dirty := false
 ## Só para pratos: ids do que está em cima, ex. ["lettuce_chopped", "tomato_chopped"] ou ["soup"].
 var contents: Array[String] = []
+## Só para pratos vazios: quantos estão empilhados (1 ou 2).
+var stack := 1
 
 
-static func ingredient(p_kind: Kind) -> Item:
+static func ingredient(p_kind: String) -> Item:
 	var item := Item.new()
 	item.kind = p_kind
 	return item
 
 
 static func plate() -> Item:
-	return ingredient(Kind.PLATE)
+	return ingredient(PLATE)
 
 
-## Para enviar pela rede: [kind, chopped, contents, dirty] ou null.
+## Para enviar pela rede: [kind, chopped, contents, dirty, stack] ou null.
 static func serialize(item: Item) -> Variant:
-	return null if item == null else [item.kind, item.chopped, item.contents, item.dirty]
+	return null if item == null else [item.kind, item.chopped, item.contents, item.dirty, item.stack]
 
 
 static func deserialize(data: Variant) -> Item:
@@ -36,26 +39,37 @@ static func deserialize(data: Variant) -> Item:
 	item.chopped = data[1]
 	item.contents.assign(data[2])
 	item.dirty = data[3]
+	item.stack = data[4]
 	return item
 
 
 func is_plate() -> bool:
-	return kind == Kind.PLATE
+	return kind == PLATE
+
+
+## Pratos vazios iguais (os dois sujos ou os dois limpos) que cabem numa pilha.
+func can_stack(other: Item) -> bool:
+	return other != null and is_plate() and other.is_plate() and contents.is_empty() and other.contents.is_empty() \
+		and dirty == other.dirty and stack + other.stack <= MAX_STACK
 
 
 ## Id de um ingrediente no estado atual, ex. "tomato" ou "tomato_chopped".
 func content_id() -> String:
-	return KIND_IDS[kind] + ("_chopped" if chopped else "")
+	return kind + ("_chopped" if chopped else "")
+
+
+func can_chop() -> bool:
+	return not is_plate() and not chopped and Recipes.CHOPPABLE.has(kind)
 
 
 ## Tenta pôr algo neste prato. Devolve true se coube.
 func try_add(id: String) -> bool:
-	if not is_plate() or dirty or contents.has("soup"):
+	if not is_plate() or dirty or stack > 1 or contents.any(func(c): return Recipes.SOLO.has(c)):
 		return false
-	if id == "soup":
+	if Recipes.SOLO.has(id):
 		if not contents.is_empty():
 			return false
-	elif not Recipes.PLATEABLE.has(id) or contents.has(id) or contents.size() >= 2:
+	elif not Recipes.PLATEABLE.has(id) or contents.has(id) or contents.size() >= Recipes.PLATE_MAX:
 		return false
 	contents.append(id)
 	return true

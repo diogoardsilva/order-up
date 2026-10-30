@@ -99,52 +99,77 @@ def note_freq(n):
     return 440.0 * 2 ** ((n - 69) / 12)
 
 
-def music():
-    bpm = 100
+def pad_note(freq, seconds):
+    """Nota de "piano elétrico" suave: seno com um pouco de 2.º harmónico e ataque lento."""
+    t = t_of(seconds)
+    s = np.sin(2 * np.pi * freq * t) + 0.25 * np.sin(2 * np.pi * freq * 2 * t) * np.exp(-t * 3)
+    return s * np.clip(t / 0.02, 0, 1) * np.exp(-t * 1.2)
+
+
+def music(seed, bpm, progression, bars=32):
+    """Música calma: piano suave, baixo em mínimas, pouca percussão e uma melodia
+    com espaço (pausas), que varia de secção para secção para não cansar."""
+    r = np.random.default_rng(seed)
     beat = 60 / bpm
-    bars = 16
     total = bars * 4 * beat
-    out = np.zeros(int(RATE * total) + RATE)
+    out = np.zeros(int(RATE * total) + RATE * 2)
 
     def add(at, sound, vol):
         i = int(at * RATE)
         out[i:i + len(sound)] += sound[:len(out) - i] * vol
 
-    # Dó - Lá menor - Fá - Sol, com uma volta a Mi menor na segunda metade.
-    chords = [[60, 64, 67], [57, 60, 64], [53, 57, 60], [55, 59, 62]] * 2 + \
-             [[60, 64, 67], [52, 55, 59], [53, 57, 60], [55, 59, 62]] * 2
-    roots = [48, 45, 41, 43] * 2 + [48, 40, 41, 43] * 2
-    # Melodia: um motivo de dois compassos que se repete com variações.
-    motif_a = [(0, 72, 1), (1, 74, 0.5), (1.5, 76, 1.5), (3, 79, 1), (4, 76, 1), (5, 74, 1), (6, 72, 2)]
-    motif_b = [(0, 76, 1), (1, 79, 0.5), (1.5, 81, 1.5), (3, 79, 1), (4, 77, 1), (5, 76, 1), (6, 74, 2)]
-    motif_c = [(0, 79, 1.5), (1.5, 77, 0.5), (2, 76, 1), (3, 74, 1), (4, 72, 1.5), (5.5, 74, 0.5), (6, 72, 2)]
-    melody = []
-    for i, m in enumerate([motif_a, motif_b, motif_a, motif_c, motif_b, motif_a, motif_b, motif_c]):
-        melody += [(i * 8 + b, n, d) for b, n, d in m]
-
+    rhythms = [
+        [(0, 1.5), (2, 1), (3, 1)],
+        [(0, 2), (2.5, 1.5)],
+        [(0.5, 1), (1.5, 0.5), (2, 2)],
+        [(0, 1), (1, 1), (2, 2)],
+        [(1, 1), (2, 1), (3, 1)],
+        [(0, 3)],
+    ]
+    scale = [0, 2, 4, 7, 9]  # pentatónica maior
+    sections = []
+    for _ in range(bars // 8):
+        sections.append([(r.choice(len(rhythms)), r.integers(0, 5)) for _ in range(8)])
+    # Forma A A' B A: a segunda é a primeira com pequenas mudanças.
+    order = [0, 0, 1, 0] if len(sections) >= 2 else [0]
     for bar in range(bars):
         t0 = bar * 4 * beat
-        # Baixo em colcheias.
-        for k in range(8):
-            n = roots[bar] + (12 if k % 4 == 2 else 0)
-            add(t0 + k * beat / 2, blip(note_freq(n), beat / 2 * 0.9, "triangle", 3.0), 0.32)
-        # Acordes em arpejo suave.
-        for k in range(8):
-            n = chords[bar][k % 3] + (12 if k >= 4 else 0)
-            add(t0 + k * beat / 2, blip(note_freq(n), beat * 0.8, "square", 7.0), 0.07)
-        # Pratos de choque nos contratempos.
+        chord = progression[bar % len(progression)]
+        root = chord[0]
+        # Baixo: fundamental e quinta em mínimas.
+        add(t0, blip(note_freq(root - 12), beat * 2, "triangle", 2.0), 0.28)
+        add(t0 + 2 * beat, blip(note_freq(root - 5), beat * 2, "triangle", 2.0), 0.22)
+        # Acorde arpejado devagar.
+        for k, n in enumerate(chord):
+            add(t0 + k * beat * 0.12, pad_note(note_freq(n), beat * 4), 0.10)
+        if bar % 2 == 1:
+            add(t0 + 2 * beat, pad_note(note_freq(chord[1] + 12), beat * 2), 0.06)
+        # Shaker muito suave.
         for k in range(4):
-            add(t0 + (k + 0.5) * beat, noise(0.05) * env(int(RATE * 0.05), curve=8), 0.05)
-            if k % 2 == 1:
-                add(t0 + k * beat, noise(0.09, 3) * env(int(RATE * 0.09), curve=6), 0.09)
-    for b, n, d in melody:
-        dur = d * beat
-        t = t_of(dur)
-        vib = 1 + 0.004 * np.sin(2 * np.pi * 5.5 * t) * np.clip(t / 0.15, 0, 1)
-        s = osc(note_freq(n) * vib, dur, "triangle") * 0.8 + osc(note_freq(n) * 2 * vib, dur, "sine") * 0.15
-        e = np.clip(t / 0.01, 0, 1) * np.exp(-1.6 * t / dur)
-        add(b * beat, s * e, 0.42)
-    return out[:int(RATE * total)]
+            add(t0 + (k + 0.5) * beat, noise(0.04, 2) * env(int(RATE * 0.04), curve=9), 0.025)
+        # Melodia (com uma secção em cada 8 compassos, e alguns compassos em silêncio).
+        sec = sections[order[(bar // 8) % len(order)]]
+        rhythm_i, offset = sec[bar % 8]
+        if (bar // 8) == 1 and bar % 8 in (3, 6):
+            rhythm_i = (rhythm_i + 1) % len(rhythms)
+        if bar % 8 == 7:
+            continue
+        degree = int(offset)
+        for b, d in rhythms[rhythm_i]:
+            step = int(r.choice([-1, 0, 1, 1, 2]))
+            degree = int(np.clip(degree + step, 0, 9))
+            n = 72 + scale[degree % 5] + 12 * (degree // 5) - 12
+            dur = d * beat
+            tt = t_of(dur)
+            vib = 1 + 0.003 * np.sin(2 * np.pi * 5 * tt) * np.clip(tt / 0.2, 0, 1)
+            sound = osc(note_freq(n) * vib, dur, "sine") + 0.2 * osc(note_freq(n) * 2 * vib, dur, "sine")
+            e = np.clip(tt / 0.03, 0, 1) * np.exp(-1.3 * tt / dur)
+            add(t0 + b * beat, sound * e, 0.26)
+    # Cauda curta para o loop não cortar notas a meio de forma brusca.
+    loop = out[:int(RATE * total)]
+    tail = out[int(RATE * total):]
+    loop[:len(tail)] += tail[:len(loop)]
+    return loop
 
 
 def main():
@@ -177,7 +202,10 @@ def main():
     save("dash", noise(0.16, 12) * np.sin(np.linspace(0, np.pi, int(RATE * 0.16))), 0.35)
     save("note", seq(blip(784, 0.05, "triangle", 5), blip(1047, 0.12, "triangle", 5)), 0.45)
     save("round_end", seq(*[blip(note_freq(n), 0.14, "square", 3) for n in (72, 76, 79)], blip(note_freq(84), 0.6, "square", 2)), 0.4)
-    save("music", music(), 0.55)
+    # Duas músicas: uma para o menu e outra para a cozinha.
+    save("music_menu", music(7, 72, [[60, 64, 67, 71], [57, 60, 64, 67], [62, 65, 69, 72], [55, 59, 62, 65]]), 0.5)
+    save("music", music(3, 84, [[65, 69, 72, 76], [64, 67, 71, 74], [62, 65, 69, 72], [60, 64, 67, 71],
+                                [65, 69, 72, 76], [64, 67, 71, 74], [62, 65, 69, 72], [67, 71, 74, 77]]), 0.5)
     print("Sons escritos em", OUT)
 
 

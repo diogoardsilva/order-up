@@ -81,7 +81,7 @@ func _animate(delta: float) -> void:
 	_squash = move_toward(_squash, 0.0, delta * 5.0)
 	_hand = _hand.lerp(facing.round() * 9 + Vector2(0, 2), minf(delta * 18.0, 1.0))
 	# Som e "esmagar" quando o que tem na mão muda (funciona igual online).
-	var key := "" if held == null else "%d%s%s%s" % [held.kind, held.chopped, held.contents, held.dirty]
+	var key := "" if held == null else "%s%s%s%s%d" % [held.kind, held.chopped, held.contents, held.dirty, held.stack]
 	if key != _held_key:
 		if _held_key == "":
 			Sfx.play("pickup")

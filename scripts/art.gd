@@ -25,6 +25,7 @@ const CRATE := preload("res://assets/sprites/crate.png")
 const BOARD := preload("res://assets/sprites/board.png")
 const POT := preload("res://assets/sprites/pot.png")
 const SINK := preload("res://assets/sprites/sink.png")
+const REGISTER: Texture2D = preload("res://assets/sprites/register.png")
 const TRASH := preload("res://assets/sprites/trash.png")
 const TABLE := preload("res://assets/sprites/table.png")
 const CHAIR := preload("res://assets/sprites/chair.png")
@@ -37,18 +38,35 @@ const STAR_EMPTY := preload("res://assets/sprites/star_empty.png")
 const ARROW := preload("res://assets/sprites/arrow.png")
 const CLOCK := preload("res://assets/sprites/clock.png")
 const COIN := preload("res://assets/sprites/coin.png")
-const CONTENT := {
-	"tomato": preload("res://assets/sprites/tomato.png"),
-	"lettuce": preload("res://assets/sprites/lettuce.png"),
-	"tomato_chopped": preload("res://assets/sprites/tomato_chopped.png"),
-	"lettuce_chopped": preload("res://assets/sprites/lettuce_chopped.png"),
-	"soup": preload("res://assets/sprites/soup.png"),
+const COOK_TOOLS := {
+	"pot": preload("res://assets/sprites/pot.png"),
+	"pan": preload("res://assets/sprites/pan.png"),
+	"oven": preload("res://assets/sprites/oven.png"),
 }
+
+static var _cache := {}
 
 const CHEF_FRAME := Vector2i(16, 24)
 const CUSTOMER_FRAME := Vector2i(16, 22)
 ## Linhas da folha de clientes (penteados diferentes).
 const CUSTOMER_LOOKS := 4
+
+
+## Sprite de comida (ingrediente, cortado, cozinhado ou prato pronto), ou null.
+static func food(id: String) -> Texture2D:
+	return _load("res://assets/sprites/food/%s.png" % id)
+
+
+## Sprite de um tema de restaurante, ex. themed("japan", "floor").
+static func themed(theme: String, name: String) -> Texture2D:
+	var tex := _load("res://assets/sprites/themes/%s_%s.png" % [theme, name])
+	return tex if tex else _load("res://assets/sprites/themes/classic_%s.png" % name)
+
+
+static func _load(path: String) -> Texture2D:
+	if not _cache.has(path):
+		_cache[path] = load(path) if ResourceLoader.exists(path) else null
+	return _cache[path]
 
 
 ## Desenha uma textura centrada num ponto (arredondado ao píxel).

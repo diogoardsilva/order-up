@@ -7,13 +7,15 @@ enum Mode { PLAY, TUTORIAL }
 const SAVE_PATH := "user://save.cfg"
 
 var mode := Mode.PLAY
+## Restaurante escolhido (índice em Levels.ALL).
+var level := 0
 var tutorial_done := false
 var last_ip := ""
 ## Mensagem a mostrar no menu (ex. ligação perdida).
 var menu_message := ""
 var fullscreen := true
 ## Volumes de 0 a 1.
-var music_volume := 0.7
+var music_volume := 0.5
 var sfx_volume := 0.8
 
 
@@ -28,7 +30,7 @@ func _ready() -> void:
 		tutorial_done = cfg.get_value("progress", "tutorial_done", false)
 		last_ip = cfg.get_value("net", "last_ip", "")
 		fullscreen = cfg.get_value("options", "fullscreen", true)
-		music_volume = cfg.get_value("options", "music_volume", 0.7)
+		music_volume = cfg.get_value("options", "music_volume", 0.5)
 		sfx_volume = cfg.get_value("options", "sfx_volume", 0.8)
 	_apply_window()
 	_apply_volumes()
@@ -71,6 +73,18 @@ func _apply_window() -> void:
 func _apply_volumes() -> void:
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Music"), linear_to_db(maxf(music_volume, 0.0001)))
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("SFX"), linear_to_db(maxf(sfx_volume, 0.0001)))
+
+
+## Melhor número de estrelas num restaurante.
+func best_stars(level_id: String) -> int:
+	var cfg := ConfigFile.new()
+	cfg.load(SAVE_PATH)
+	return cfg.get_value("stars", level_id, 0)
+
+
+func save_stars(level_id: String, stars: int) -> void:
+	if stars > best_stars(level_id):
+		_save("stars", level_id, stars)
 
 
 func mark_tutorial_done() -> void:

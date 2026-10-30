@@ -12,9 +12,13 @@ func interact(held: Item) -> Item:
 			count -= 1
 			return Item.plate()
 		return null
-	# Devolver um prato limpo e vazio à pilha.
 	if held.is_plate() and not held.dirty and held.contents.is_empty():
-		count += 1
+		# Com um prato na mão leva-se mais um; com dois (ou sem pratos na pilha) devolvem-se.
+		if count > 0 and held.stack < Item.MAX_STACK:
+			count -= 1
+			held.stack += 1
+			return held
+		count += held.stack
 		return null
 	return held
 

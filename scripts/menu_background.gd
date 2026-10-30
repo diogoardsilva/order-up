@@ -39,7 +39,7 @@ func _draw() -> void:
 		y += tile.y
 	draw_rect(Rect2(Vector2.ZERO, size), Color(0.16, 0.07, 0.06, 0.45))
 	for f in _floaters:
-		var tex: Texture2D = Art.CONTENT[f["id"]]
+		var tex: Texture2D = Art.food(f["id"])
 		var s: float = f["scale"]
 		var pos := Vector2(f["x"] * size.x, f["y"] * size.y + sin(_time * 1.5 + f["phase"]) * 8.0)
 		draw_set_transform(pos, sin(_time + f["phase"]) * 0.2, Vector2(s, s))

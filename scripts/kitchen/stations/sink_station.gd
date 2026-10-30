@@ -17,8 +17,13 @@ func interact(held: Item) -> Item:
 			return Item.plate()
 		return null
 	if held.is_plate() and held.dirty:
-		dirty += 1
+		dirty += held.stack
 		return null
+	# Com um prato limpo na mão, leva-se mais um.
+	if clean > 0 and held.can_stack(Item.plate()):
+		clean -= 1
+		held.stack += 1
+		return held
 	return held
 
 

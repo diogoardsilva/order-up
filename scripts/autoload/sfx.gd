@@ -21,6 +21,8 @@ const SOUNDS := {
 	"round_end": preload("res://assets/audio/round_end.wav"),
 }
 const MUSIC: AudioStreamWAV = preload("res://assets/audio/music.wav")
+const MUSIC_MENU: AudioStreamWAV = preload("res://assets/audio/music_menu.wav")
+const MUSIC_DB := -14.0
 const SIZZLE: AudioStreamWAV = preload("res://assets/audio/sizzle.wav")
 const VOICES := 10
 
@@ -38,12 +40,11 @@ func _ready() -> void:
 		p.bus = "SFX"
 		add_child(p)
 		_players.append(p)
-	for stream: AudioStreamWAV in [MUSIC, SIZZLE]:
+	for stream: AudioStreamWAV in [MUSIC, MUSIC_MENU, SIZZLE]:
 		stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
 		stream.loop_begin = 0
 		stream.loop_end = stream.data.size() / 2
-	_music.stream = MUSIC
-	_music.volume_db = -9.0
+	_music.volume_db = MUSIC_DB
 	_music.bus = "Music"
 	add_child(_music)
 	_sizzle.stream = SIZZLE
@@ -61,9 +62,19 @@ func play(name: String, volume_db := 0.0, pitch_spread := 0.06) -> void:
 	p.play()
 
 
-func music_on() -> void:
-	if not _music.playing:
-		_music.play()
+## Toca a música do menu ("menu") ou da cozinha ("game"), com fade ao trocar.
+func music_on(kind := "menu") -> void:
+	var stream := MUSIC_MENU if kind == "menu" else MUSIC
+	if _music.stream == stream and _music.playing:
+		return
+	if _music.playing:
+		var t := create_tween()
+		t.tween_property(_music, "volume_db", -40.0, 0.5)
+		await t.finished
+	_music.stream = stream
+	_music.volume_db = -40.0
+	_music.play()
+	create_tween().tween_property(_music, "volume_db", MUSIC_DB, 1.0)
 
 
 ## Chiar dos fogões: 0 (nenhum ao lume) a 1 (vários).

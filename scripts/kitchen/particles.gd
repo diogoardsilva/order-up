@@ -4,6 +4,11 @@ extends RefCounted
 ## saltar da tábua e brilhos ao servir. Têm um limite para não pesar em PCs fracos.
 
 const MAX := 300
+## Cor dos pedaços que saltam ao cortar cada ingrediente.
+const CHOP_COLORS := {
+	"tomato": Color("e04a3f"), "lettuce": Color("6cbf4a"), "kale": Color("3a7f2f"), "potato": Color("f2d48a"),
+	"cod": Color("f1eef6"), "salmon": Color("f59a6a"), "cucumber": Color("7fc25a"), "cheese": Color("f6c444"),
+}
 
 var _items: Array[Dictionary] = []
 
@@ -43,7 +48,7 @@ func smoke(at: Vector2, heavy: bool) -> void:
 
 
 func chop(at: Vector2, item: Item) -> void:
-	var color := Color("e04a3f") if item and item.kind == Item.Kind.TOMATO else Color("6cbf4a")
+	var color: Color = CHOP_COLORS.get(item.kind if item else "", Color("e6cfa0"))
 	_add(at, Vector2(randf_range(-30, 30), randf_range(-40, -15)), 0.4, color, 1, Vector2(0, 120))
 
 
