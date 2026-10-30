@@ -1,8 +1,10 @@
 extends Control
-## Lobby local: cada dispositivo carrega no botão de pegar para entrar (até 4).
+## Lobby: cada dispositivo carrega no botão de pegar para entrar (até 4).
+## Online, os jogadores de todos os PCs aparecem aqui e só o anfitrião começa.
 
 var _slots: Array[Dictionary] = []
 var _pads_label: Label
+var _room_label: Label
 
 
 func _ready() -> void:
@@ -29,6 +31,8 @@ func _ready() -> void:
 		"Entrar: Espaço / Enter / Cruz   ·   Sair: Shift / - / Círculo\nComeçar: Esc / Backspace / Options (sem ninguém, volta ao menu)", 11, UiStyle.MUTED))
 	_pads_label = UiStyle.label("", 10, UiStyle.MUTED)
 	root.add_child(_pads_label)
+	_room_label = UiStyle.label(_room_text(), 10, Color("f2c94c"))
+	root.add_child(_room_label)
 
 	# Primeira leitura sem efeito, para a tecla que abriu o lobby não contar como "entrar".
 	for source in DeviceManager.all_sources():
@@ -47,11 +51,22 @@ func _process(_delta: float) -> void:
 		elif joined and source.just_pressed(&"dash"):
 			PlayerRegistry.leave(source)
 		elif source.just_pressed(&"pause"):
-			if not PlayerRegistry.players.is_empty():
-				get_tree().change_scene_to_file("res://scenes/level.tscn")
-			else:
+			if PlayerRegistry.players.is_empty() or (Net.is_client() and not joined):
+				Net.leave()
 				get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
+			elif Net.online and Net.is_host():
+				Net.start_level.rpc()
+			elif not Net.online:
+				get_tree().change_scene_to_file("res://scenes/level.tscn")
 			return
+
+
+func _room_text() -> String:
+	if not Net.online:
+		return ""
+	if Net.is_host():
+		return "Sala online aberta. IP para os amigos: %s (porta %d)" % [" ou ".join(Net.local_addresses()), Net.PORT]
+	return "Ligado à sala. Só o anfitrião pode começar."
 
 
 func _make_slot(i: int) -> Control:

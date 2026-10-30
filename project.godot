@@ -16,6 +16,7 @@ config/icon="res://icon.svg"
 GameState="*res://scripts/autoload/game_state.gd"
 DeviceManager="*res://scripts/autoload/device_manager.gd"
 PlayerRegistry="*res://scripts/autoload/player_registry.gd"
+Net="*res://scripts/autoload/net.gd"
 
 [display]
 

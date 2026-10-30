@@ -45,6 +45,22 @@ func _process(delta: float) -> void:
 			failed.emit()
 
 
+func serialize() -> Array:
+	return [score, delivered_count, failed_count,
+		orders.map(func(o): return [o["recipe"]["id"], o["time_left"]])]
+
+
+func apply(data: Array) -> void:
+	score = data[0]
+	delivered_count = data[1]
+	failed_count = data[2]
+	orders.clear()
+	for o in data[3]:
+		for recipe in Recipes.ALL:
+			if recipe["id"] == o[0]:
+				orders.append({"recipe": recipe, "time_left": o[1]})
+
+
 ## Entrega um prato. Serve o pedido mais antigo dessa receita e devolve true.
 func deliver(contents: Array[String]) -> bool:
 	var recipe := Recipes.match_plate(contents)

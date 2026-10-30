@@ -24,5 +24,13 @@ func use(delta: float) -> void:
 		_chop = 0.0
 
 
+func _get_extra() -> Variant:
+	return _chop if _chop > 0.0 else null
+
+
+func _set_extra(extra: Variant) -> void:
+	_chop = extra if extra != null else 0.0
+
+
 func progress() -> float:
 	return _chop / CHOP_TIME if _chop > 0.0 else -1.0

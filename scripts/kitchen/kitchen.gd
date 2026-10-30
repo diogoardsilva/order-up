@@ -32,6 +32,8 @@ var stations := {}  # Vector2i -> Station
 var spawns := {}  # slot -> Vector2
 var chefs: Array[Chef] = []
 var orders: OrderManager
+## Só o anfitrião faz as estações avançar (cozinhar, queimar).
+var simulate := true
 ## Células assinaladas com uma seta (usado pelo tutorial).
 var hint_cells: Array[Vector2i] = []
 
@@ -76,8 +78,9 @@ func use(cell: Vector2i, delta: float) -> void:
 
 
 func _process(delta: float) -> void:
-	for station: Station in stations.values():
-		station.tick(delta)
+	if simulate:
+		for station: Station in stations.values():
+			station.tick(delta)
 	queue_redraw()
 
 
