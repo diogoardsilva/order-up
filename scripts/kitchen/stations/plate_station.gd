@@ -17,3 +17,11 @@ func interact(held: Item) -> Item:
 		count += 1
 		return null
 	return held
+
+
+func _get_extra() -> Variant:
+	return count
+
+
+func _set_extra(extra: Variant) -> void:
+	count = extra if extra != null else 0

@@ -40,18 +40,22 @@ var stations := {}  # Vector2i -> Station
 var spawns := {}  # slot -> Vector2
 var chefs: Array[Chef] = []
 var orders: OrderManager
+## Só o anfitrião faz as estações avançar (cozinhar, queimar).
+var simulate := true
 ## Células assinaladas com uma seta (usado pelo tutorial).
 var hint_cells: Array[Vector2i] = []
 var particles := Particles.new()
+
+## Um efeito de texto (pontos, "Anotado!"). Online, o nível reenvia-o aos outros PCs.
+signal fx(at: Vector2, text: String, color: Color, sparkle: bool)
 
 
 func _init(p_orders: OrderManager) -> void:
 	orders = p_orders
 	orders.delivered.connect(func(points: int, at: Vector2):
-		particles.sparkle(at)
-		particles.text(at + Vector2(0, -20), "+%d" % points, Color("f2c94c")))
+		show_fx(at, "+%d" % points, Color("f2c94c"), true))
 	orders.failed.connect(func(at: Vector2):
-		particles.text(at + Vector2(0, -20), "-%d" % OrderManager.FAIL_PENALTY, Color("e8574d")))
+		show_fx(at, "-%d" % OrderManager.FAIL_PENALTY, Color("e8574d")))
 	for y in LAYOUT.size():
 		for x in LAYOUT[y].length():
 			var c := LAYOUT[y][x]
@@ -112,9 +116,16 @@ func interact(chef: Chef, cell: Vector2i) -> void:
 			and (station as TableStation).customer.is_calling():
 		# Anotar o pedido não precisa de mãos livres.
 		(station as TableStation).customer.take_order()
-		particles.text(cell_center(cell) + Vector2(0, -20), "Anotado!", Color("f2c94c"))
+		show_fx(cell_center(cell), "Anotado!", Color("f2c94c"))
 	elif station:
 		chef.held = station.interact(chef.held)
+
+
+func show_fx(at: Vector2, text: String, color: Color, sparkle := false) -> void:
+	if sparkle:
+		particles.sparkle(at)
+	particles.text(at + Vector2(0, -20), text, color)
+	fx.emit(at, text, color, sparkle)
 
 
 func use(cell: Vector2i, delta: float) -> void:
@@ -124,8 +135,13 @@ func use(cell: Vector2i, delta: float) -> void:
 
 
 func _process(delta: float) -> void:
-	for station: Station in stations.values():
-		station.tick(delta)
+	if simulate:
+		for station: Station in stations.values():
+			station.tick(delta)
+	else:
+		# Nos outros PCs os clientes deslizam até à última posição recebida.
+		for customer in orders.customers:
+			customer.pos = customer.pos.lerp(customer.net_pos, 0.3)
 	_emit_ambient(delta)
 	particles.update(delta)
 	queue_redraw()

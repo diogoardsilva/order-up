@@ -24,6 +24,7 @@ var active := true
 var scripted := false
 
 var _spawn := SPAWN_EVERY - FIRST_SPAWN
+var _next_id := 1
 
 
 func _process(delta: float) -> void:
@@ -52,9 +53,35 @@ func spawn_customer(recipe: Dictionary) -> bool:
 		return false
 	var table: TableStation = free.pick_random()
 	var customer := Customer.new(table, recipe, kitchen.path_to_seat(table), PATIENCE)
+	customer.id = _next_id
+	_next_id += 1
 	table.customer = customer
 	customers.append(customer)
 	return true
+
+
+func serialize() -> Array:
+	return [score, delivered_count, failed_count, customers.map(func(c: Customer): return c.serialize())]
+
+
+## Nos outros PCs: aplica o estado do anfitrião.
+func apply(data: Array) -> void:
+	score = data[0]
+	delivered_count = data[1]
+	failed_count = data[2]
+	var old := {}
+	for customer in customers:
+		old[customer.id] = customer
+	customers.clear()
+	for c in data[3]:
+		var table: TableStation = kitchen.stations.get(c[1])
+		customers.append(Customer.from_net(c, old.get(c[0]), table))
+	for table in kitchen.tables():
+		table.customer = null
+	for customer in customers:
+		if customer.state < Customer.State.LEAVING:
+			customer.table.customer = customer
+	_refresh_orders()
 
 
 func _pay(customer: Customer) -> void:

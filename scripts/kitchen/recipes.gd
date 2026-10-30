@@ -20,3 +20,10 @@ static func match_plate(contents: Array[String]) -> Dictionary:
 		if needs == sorted:
 			return recipe
 	return {}
+
+
+static func by_id(id: String) -> Dictionary:
+	for recipe in ALL:
+		if recipe["id"] == id:
+			return recipe
+	return {}

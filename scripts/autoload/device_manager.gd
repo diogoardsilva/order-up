@@ -25,6 +25,14 @@ func all_sources() -> Array[InputSource]:
 	return result
 
 
+## A fonte local com este id ("kb:0", "pad:1"...), ou null.
+func find(id: String) -> InputSource:
+	for source in keyboard_sources + Array(_pads.values()):
+		if source.get_id() == id:
+			return source
+	return null
+
+
 func connected_pad_names() -> PackedStringArray:
 	var names := PackedStringArray()
 	for device in Input.get_connected_joypads():
