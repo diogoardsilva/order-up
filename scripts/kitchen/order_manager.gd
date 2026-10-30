@@ -1,62 +1,73 @@
 class_name OrderManager
 extends Node
-## Pedidos em aberto, pontuação e falhas da ronda.
+## Clientes do salão, os pedidos deles, pontuação e falhas da ronda.
 
 signal delivered(points: int)
 signal failed
 
-const MAX_ORDERS := 4
-const ORDER_TIME := 60.0
-const SPAWN_EVERY := 18.0
+const MAX_CUSTOMERS := 4
+const PATIENCE := 70.0
+const SPAWN_EVERY := 14.0
+const FIRST_SPAWN := 2.0
 const FAIL_PENALTY := 10
 const MAX_TIP := 10
 
-## Cada pedido: {"recipe": Dictionary, "time_left": float}
+var kitchen: Kitchen
+var customers: Array[Customer] = []
+## Pedidos à espera (para os talões): {"recipe", "time_left", "table"}
 var orders: Array[Dictionary] = []
 var score := 0
 var delivered_count := 0
 var failed_count := 0
 var active := true
+## No tutorial os clientes não chegam sozinhos nem perdem a paciência.
+var scripted := false
 
-var _spawn := 0.0
-
-
-func _ready() -> void:
-	_add_order()
-	_add_order()
+var _spawn := SPAWN_EVERY - FIRST_SPAWN
 
 
 func _process(delta: float) -> void:
-	if not active:
-		return
-	_spawn += delta
-	if orders.is_empty() or (_spawn >= SPAWN_EVERY and orders.size() < MAX_ORDERS):
-		_spawn = 0.0
-		_add_order()
-	for order in orders.duplicate():
-		order["time_left"] -= delta
-		if order["time_left"] <= 0.0:
-			orders.erase(order)
+	if active and not scripted:
+		_spawn += delta
+		if _spawn >= SPAWN_EVERY and customers.size() < MAX_CUSTOMERS:
+			if spawn_customer(Recipes.ALL.pick_random()):
+				_spawn = 0.0
+	for customer in customers.duplicate():
+		if customer.tick(delta, active and not scripted):
 			score = maxi(score - FAIL_PENALTY, 0)
 			failed_count += 1
 			failed.emit()
+		if customer.state == Customer.State.GONE:
+			customers.erase(customer)
+		# A comida chegou à mesa: o cliente começa a comer e paga.
+		elif customer.is_waiting() and customer.table.item != null:
+			_pay(customer)
+	_refresh_orders()
 
 
-## Entrega um prato. Serve o pedido mais antigo dessa receita e devolve true.
-func deliver(contents: Array[String]) -> bool:
-	var recipe := Recipes.match_plate(contents)
-	if recipe.is_empty() or not active:
+## Senta um cliente numa mesa livre ao acaso. Devolve false se não houver mesa.
+func spawn_customer(recipe: Dictionary) -> bool:
+	var free := kitchen.tables().filter(func(t: TableStation): return t.is_free())
+	if free.is_empty():
 		return false
-	for order in orders:
-		if order["recipe"]["id"] == recipe["id"]:
-			var points: int = recipe["points"] + roundi(MAX_TIP * order["time_left"] / ORDER_TIME)
-			orders.erase(order)
-			score += points
-			delivered_count += 1
-			delivered.emit(points)
-			return true
-	return false
+	var table: TableStation = free.pick_random()
+	var customer := Customer.new(table, recipe, kitchen.path_to_seat(table), PATIENCE)
+	table.customer = customer
+	customers.append(customer)
+	return true
 
 
-func _add_order() -> void:
-	orders.append({"recipe": Recipes.ALL.pick_random(), "time_left": ORDER_TIME})
+func _pay(customer: Customer) -> void:
+	var points: int = customer.recipe["points"] + roundi(MAX_TIP * customer.patience / customer.max_patience)
+	score += points
+	delivered_count += 1
+	customer.serve()
+	delivered.emit(points)
+
+
+func _refresh_orders() -> void:
+	orders.clear()
+	for customer in customers:
+		if customer.is_waiting():
+			orders.append({"recipe": customer.recipe, "time_left": customer.patience,
+				"max_time": customer.max_patience, "table": customer.table.number})

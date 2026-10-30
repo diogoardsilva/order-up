@@ -8,6 +8,8 @@ const KIND_IDS := ["tomato", "lettuce", "plate"]
 
 var kind: Kind
 var chopped := false
+## Só para pratos: veio de uma mesa e tem de ser lavado.
+var dirty := false
 ## Só para pratos: ids do que está em cima, ex. ["lettuce_chopped", "tomato_chopped"] ou ["soup"].
 var contents: Array[String] = []
 
@@ -33,7 +35,7 @@ func content_id() -> String:
 
 ## Tenta pôr algo neste prato. Devolve true se coube.
 func try_add(id: String) -> bool:
-	if not is_plate() or contents.has("soup"):
+	if not is_plate() or dirty or contents.has("soup"):
 		return false
 	if id == "soup":
 		if not contents.is_empty():
