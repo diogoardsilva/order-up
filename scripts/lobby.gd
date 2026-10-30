@@ -47,7 +47,7 @@ func _process(_delta: float) -> void:
 			PlayerRegistry.leave(source)
 		elif source.just_pressed(&"pause"):
 			if not PlayerRegistry.players.is_empty():
-				get_tree().change_scene_to_file("res://scenes/test_kitchen.tscn")
+				get_tree().change_scene_to_file("res://scenes/level.tscn")
 			elif source is KeyboardSource:
 				get_tree().change_scene_to_file("res://scenes/main_menu.tscn")
 			return
