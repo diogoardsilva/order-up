@@ -813,6 +813,30 @@ def coin():
     return s.outline()
 
 
+def sign():
+    """Placa de madeira pendurada por duas cordas, para o nome no menu."""
+    s = Spr(132, 64)
+    for x in (22, 108):
+        for y in range(0, 12):
+            s.px(x + (y // 3) % 2, y, CREAM[3] if y % 2 else CREAM[2])
+    board = Spr(132, 52)
+    board.rect(1, 1, 130, 50, WOOD[2])
+    rng = random.Random(21)
+    for i, y in enumerate((1, 18, 35)):
+        tone = [WOOD[1], WOOD[2], WOOD[1]][i]
+        board.rect(1, y, 130, 16, tone)
+        board.hline(1, y, 130, WOOD[0])
+        board.hline(1, y + 15, 130, WOOD[4])
+        for _ in range(16):
+            board.hline(rng.randrange(2, 120), y + rng.randrange(3, 13), rng.randint(3, 9), WOOD[3])
+    board.vline(1, 1, 50, WOOD[0]); board.vline(130, 1, 50, WOOD[4])
+    for x, y in [(5, 5), (126, 5), (5, 46), (126, 46)]:
+        board.px(x, y, STEEL[1]); board.px(x + 1, y + 1, STEEL[4])
+    board.outline()
+    s.paste(board, 0, 11)
+    return s
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     chef_sheet()
@@ -824,7 +848,7 @@ def main():
         ("wall_front", wall_front), ("backwall_kitchen", backwall_kitchen), ("window", window),
         ("plant", plant), ("shelf", shelf), ("counter", counter), ("stove", stove), ("board", board),
         ("pot", pot), ("sink", sink), ("trash", trash), ("crate", crate), ("table", table),
-        ("chair", chair), ("door", door),
+        ("chair", chair), ("door", door), ("sign", sign),
     ]:
         fn().save(name)
     for name, fn in [

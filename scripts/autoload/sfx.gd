@@ -35,6 +35,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	for i in VOICES:
 		var p := AudioStreamPlayer.new()
+		p.bus = "SFX"
 		add_child(p)
 		_players.append(p)
 	for stream: AudioStreamWAV in [MUSIC, SIZZLE]:
@@ -43,9 +44,11 @@ func _ready() -> void:
 		stream.loop_end = stream.data.size() / 2
 	_music.stream = MUSIC
 	_music.volume_db = -9.0
+	_music.bus = "Music"
 	add_child(_music)
 	_sizzle.stream = SIZZLE
 	_sizzle.volume_db = -80.0
+	_sizzle.bus = "SFX"
 	add_child(_sizzle)
 
 

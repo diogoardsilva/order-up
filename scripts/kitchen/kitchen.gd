@@ -49,6 +49,8 @@ var particles := Particles.new()
 var _customer_seen := {}  # id -> [estado, momento da mudança]
 var _station_progress := {}  # célula -> [progresso, tempo desde o último som]
 var _time := 0.0
+## Sem sons (o restaurante a funcionar por trás do menu).
+var quiet := false
 
 ## Um efeito de texto (pontos, "Anotado!"). Online, o nível reenvia-o aos outros PCs.
 signal fx(at: Vector2, text: String, color: Color, sparkle: bool)
@@ -127,16 +129,21 @@ func interact(chef: Chef, cell: Vector2i) -> void:
 
 func show_fx(at: Vector2, text: String, color: Color, sparkle := false) -> void:
 	if text.begins_with("+"):
-		Sfx.play("ding")
-		Sfx.play("coin", -4.0)
+		_sfx("ding")
+		_sfx("coin", -4.0)
 	elif text.begins_with("-"):
-		Sfx.play("fail")
+		_sfx("fail")
 	else:
-		Sfx.play("note")
+		_sfx("note")
 	if sparkle:
 		particles.sparkle(at)
 	particles.text(at + Vector2(0, -20), text, color)
 	fx.emit(at, text, color, sparkle)
+
+
+func _sfx(name: String, volume_db := 0.0, spread := 0.06) -> void:
+	if not quiet:
+		Sfx.play(name, volume_db, spread)
 
 
 func use(cell: Vector2i, delta: float) -> void:
@@ -169,10 +176,10 @@ func _emit_ambient(delta: float) -> void:
 		last[1] += delta
 		if p > last[0] and p > 0.0:
 			if station is BoardStation and last[1] > 0.16:
-				Sfx.play("chop", -2.0, 0.15)
+				_sfx("chop", -2.0, 0.15)
 				last[1] = 0.0
 			elif station is SinkStation and last[1] > 0.45:
-				Sfx.play("wash", -4.0, 0.1)
+				_sfx("wash", -4.0, 0.1)
 				last[1] = 0.0
 		last[0] = p
 		_station_progress[station.cell] = last
@@ -191,14 +198,15 @@ func _emit_ambient(delta: float) -> void:
 			particles.chop(center, station.item)
 		elif station is SinkStation and station.progress() > 0.0 and randf() < delta * 10.0:
 			particles.bubble(center + Vector2(randf_range(-7, 7), randf_range(-3, 3)))
-	Sfx.set_sizzle(cooking / 2.0)
+	if not quiet:
+		Sfx.set_sizzle(cooking / 2.0)
 	for customer in orders.customers:
 		if (customer.is_waiting() or customer.is_calling()) and customer.patience < customer.max_patience * 0.3 and randf() < delta * 3.0:
 			particles.sweat(customer.pos + Vector2(6, -14))
 		var seen: Array = _customer_seen.get(customer.id, [-1, 0.0])
 		if seen[0] != customer.state:
 			if customer.state == Customer.State.CALLING:
-				Sfx.play("bell", -3.0)
+				_sfx("bell", -3.0)
 			_customer_seen[customer.id] = [customer.state, _time]
 
 

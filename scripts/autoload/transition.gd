@@ -21,6 +21,7 @@ func go(path: String) -> void:
 	var t := create_tween()
 	t.tween_property(_rect, "color:a", 1.0, 0.22)
 	await t.finished
+	Sfx.set_sizzle(0.0)
 	get_tree().change_scene_to_file(path)
 	await get_tree().process_frame
 	await get_tree().process_frame
