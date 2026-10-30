@@ -12,25 +12,38 @@ Descompacta e abre `OrderUp.exe`.
 **No Godot:** abre o Godot 4.7, carrega em *Import* e escolhe o `project.godot` desta pasta. Depois F5 para jogar.
 Usem a 4.7 (não a 4.3): o projeto foi feito para a 4.7.
 
-## Controlos (protótipo M0)
+## Controlos
 
 | Ação | Teclado 1 | Teclado 2 | DualShock 4 |
 | --- | --- | --- | --- |
 | Mover | WASD | Setas | Analógico esquerdo / D-pad |
 | Entrar no lobby / pegar | Espaço | Enter | Cruz |
-| Usar estação | E | . | Quadrado |
+| Usar estação (manter, ex. cortar) | E | . | Quadrado |
 | Dash / sair do lobby | Shift | - | Círculo |
 | Emote | Q | , | Triângulo |
 | Começar / pausa | Esc | Backspace | Options |
 
 O DualShock 4 funciona por USB ou Bluetooth sem DS4Windows. Se tiverem o DS4Windows aberto, fechem-no para o comando não aparecer duas vezes.
 
+## Como se joga (protótipo M1)
+
+Têm 3 minutos para servir o máximo de pedidos (aparecem no topo do ecrã).
+
+- **Salada**: alface cortada + tomate cortado num prato.
+- **Sopa de tomate**: 2 tomates cortados no fogão, esperar que coza, e recolher com um prato. Se ficar muito tempo, queima: esvaziem a panela com as mãos vazias.
+- Cortar: pousem o ingrediente na tábua e mantenham "usar".
+- Entreguem o prato na **SAÍDA**. Pedidos entregues mais cedo dão gorjeta; pedidos que expiram tiram 10 pontos.
+- O caixote do lixo deita fora ingredientes e esvazia pratos.
+
+A arte ainda é provisória (formas simples desenhadas por código).
+
 ## Estrutura
 
 ```
-scenes/            menu, lobby, sala de teste
+scenes/            menu, lobby, nível
 scripts/autoload/  DeviceManager (comandos/teclado), PlayerRegistry (jogadores 1-4)
 scripts/input/     InputSource e as variantes de teclado e comando
+scripts/kitchen/   cozinha, estações, itens, receitas e pedidos
 scripts/           lógica das cenas e do chef
 ```
 
