@@ -7,12 +7,12 @@ const LAYOUTS := [
 	{
 		"label": "Teclado (WASD)",
 		"up": KEY_W, "down": KEY_S, "left": KEY_A, "right": KEY_D,
-		"pick": KEY_SPACE, "use": KEY_E, "dash": KEY_SHIFT, "emote": KEY_Q, "pause": KEY_ESCAPE,
+		"pick": KEY_SPACE, "use": KEY_E, "dash": KEY_SHIFT, "throw": KEY_Q, "emote": KEY_R, "pause": KEY_ESCAPE,
 	},
 	{
 		"label": "Teclado (setas)",
 		"up": KEY_UP, "down": KEY_DOWN, "left": KEY_LEFT, "right": KEY_RIGHT,
-		"pick": KEY_ENTER, "use": KEY_PERIOD, "dash": KEY_SLASH, "emote": KEY_COMMA, "pause": KEY_BACKSPACE,
+		"pick": KEY_ENTER, "use": KEY_PERIOD, "dash": KEY_SLASH, "throw": KEY_COMMA, "emote": KEY_M, "pause": KEY_BACKSPACE,
 	},
 ]
 

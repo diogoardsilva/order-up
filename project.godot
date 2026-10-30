@@ -6,7 +6,7 @@ config_version=5
 [application]
 
 config/name="Order Up!"
-config/version="0.0.1"
+config/version="0.4.0"
 run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
@@ -16,15 +16,20 @@ config/icon="res://icon.svg"
 GameState="*res://scripts/autoload/game_state.gd"
 DeviceManager="*res://scripts/autoload/device_manager.gd"
 PlayerRegistry="*res://scripts/autoload/player_registry.gd"
+Net="*res://scripts/autoload/net.gd"
+Sfx="*res://scripts/autoload/sfx.gd"
+Transition="*res://scripts/autoload/transition.gd"
 
 [display]
 
-window/size/viewport_width=640
-window/size/viewport_height=360
-window/size/window_width_override=1280
-window/size/window_height_override=720
-window/stretch/mode="viewport"
-window/stretch/scale_mode="integer"
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+
+[gui]
+
+theme/custom_font="res://assets/fonts/Jersey15.ttf"
 
 [rendering]
 

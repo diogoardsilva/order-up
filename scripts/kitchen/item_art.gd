@@ -1,41 +1,64 @@
 class_name ItemArt
-## Desenho provisório dos itens, feito por código. Fica até termos sprites.
+## Desenho dos itens com os sprites de pixel art.
 
 const TOMATO := Color("e04a3f")
-const LETTUCE := Color("6cbf4a")
 const SOUP := Color("e0703f")
 const PLATE := Color("f4f0e8")
 const PLATE_RIM := Color("bdb4a6")
 
 
 static func draw_item(ci: CanvasItem, item: Item, at: Vector2) -> void:
+	if item.is_cookware():
+		_draw_cookware(ci, item, at)
+		return
 	if not item.is_plate():
 		draw_content(ci, item.content_id(), at)
 		return
-	ci.draw_circle(at, 9.0, PLATE_RIM)
-	ci.draw_circle(at, 8.0, PLATE)
+	if item.second:
+		# Segundo prato com comida, ao lado.
+		draw_item(ci, item.second, at + Vector2(-5, 3))
+		at += Vector2(4, -2)
+	if item.stack > 1:
+		# Pratos de baixo, a espreitar.
+		for k in range(item.stack - 1, 0, -1):
+			Art.centered(ci, Art.PLATE, at + Vector2(0, k * 2))
+			if item.dirty:
+				Art.centered(ci, Art.DIRT, at + Vector2(1, k * 2))
+		at += Vector2(0, -2)
+	Art.centered(ci, Art.PLATE, at)
 	if item.dirty:
-		for p in [Vector2(-3, -2), Vector2(2, 1), Vector2(-1, 3)]:
-			ci.draw_circle(at + p, 1.5, Color("8c6a4f"))
+		Art.centered(ci, Art.DIRT, at)
+	# Um prato completo desenha-se montado (ex. o hambúrguer), se houver sprite.
+	var dish := Recipes.match_plate(item.contents)
+	if not dish.is_empty() and item.contents.size() > 1 and Art.food("dish_" + dish["id"]):
+		Art.centered(ci, Art.food("dish_" + dish["id"]), at + Vector2(0, -1))
+		return
 	var n := item.contents.size()
 	for i in n:
-		var offset := Vector2.ZERO if n == 1 else Vector2(-3.0 + 6.0 * i, 0)
-		draw_content(ci, item.contents[i], at + offset, 0.75)
+		draw_content(ci, item.contents[i], at + OFFSETS[n - 1][i])
 
 
-static func draw_content(ci: CanvasItem, id: String, at: Vector2, scale := 1.0) -> void:
-	var r := 6.0 * scale
-	match id:
-		"tomato":
-			ci.draw_circle(at, r, TOMATO)
-			ci.draw_rect(Rect2(at + Vector2(-1, -r - 1), Vector2(3, 3)), LETTUCE)
-		"lettuce":
-			ci.draw_circle(at, r, LETTUCE)
-			ci.draw_circle(at + Vector2(-1, -1), r * 0.5, LETTUCE.lightened(0.3))
-		"tomato_chopped", "lettuce_chopped":
-			var color := TOMATO if id.begins_with("tomato") else LETTUCE
-			for p in [Vector2(-3, -2), Vector2(2, -3), Vector2(0, 2)]:
-				ci.draw_rect(Rect2(at + p * scale - Vector2(2, 2) * scale, Vector2(4, 4) * scale), color)
-		"soup":
-			ci.draw_circle(at, r, SOUP)
-			ci.draw_circle(at + Vector2(-2, -2) * scale, 1.5 * scale, SOUP.lightened(0.35))
+const OFFSETS := [
+	[Vector2.ZERO],
+	[Vector2(-3, -1), Vector2(3, 1)],
+	[Vector2(-4, -2), Vector2(4, -1), Vector2(0, 2)],
+]
+
+
+static func _draw_cookware(ci: CanvasItem, item: Item, at: Vector2) -> void:
+	Art.centered(ci, Art.COOK_TOOLS[item.cook_look()], at)
+	match item.cook_state:
+		Item.Cook.FILLING, Item.Cook.COOKING:
+			var n := item.contents.size()
+			for i in n:
+				draw_content(ci, item.contents[i], at + Vector2((i - (n - 1) / 2.0) * 5.0, 0))
+		Item.Cook.READY:
+			draw_content(ci, item.product, at)
+		Item.Cook.BURNT:
+			ci.draw_circle(at, 6.0, Color("1e1a1a"))
+
+
+static func draw_content(ci: CanvasItem, id: String, at: Vector2) -> void:
+	var tex := Art.food(id)
+	if tex:
+		Art.centered(ci, tex, at)
