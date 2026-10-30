@@ -1,24 +1,37 @@
 extends Node2D
 ## Um nível: cozinha, chefs, pedidos, HUD e ecrã de resultados.
+## Online, o anfitrião simula a cozinha e envia o estado ~20 vezes por segundo;
+## cada PC mexe os seus chefs, envia-lhe as posições e pede as interações.
 
 const ROUND_TIME := 180.0
 const KITCHEN_OFFSET := Vector2(80, 44)
 ## Pontos para 1, 2 e 3 estrelas.
 const STAR_SCORES: Array[int] = [40, 100, 180]
+## Frames de física entre envios (60 / 3 = 20 por segundo).
+const NET_SEND_EVERY := 3
 
 var _orders: OrderManager
 var _kitchen: Kitchen
 var _hud: Control
 var _time_left := ROUND_TIME
 var _finished := false
+var _tutorial: Tutorial
+var _tutorial_label: Label
+var _ready_peers: Array[int] = []
+var _net_frame := 0
 
 
 func _ready() -> void:
 	_orders = OrderManager.new()
+	_orders.scripted = GameState.mode == GameState.Mode.TUTORIAL and not Net.online
 	add_child(_orders)
 	_kitchen = Kitchen.new(_orders)
+	_kitchen.name = "Kitchen"
 	_kitchen.position = KITCHEN_OFFSET
 	add_child(_kitchen)
+	if Net.is_client():
+		_orders.process_mode = Node.PROCESS_MODE_DISABLED
+		_kitchen.simulate = false
 
 	for p in PlayerRegistry.players:
 		var chef := Chef.new()
@@ -27,8 +40,10 @@ func _ready() -> void:
 		chef.slot = p["slot"]
 		chef.kitchen = _kitchen
 		chef.position = _kitchen.spawns[p["slot"]]
-		chef.pause_requested.connect(_back_to_lobby)
+		chef.is_local = not p["source"] is RemoteSource
+		chef.pause_requested.connect(_on_pause)
 		chef.confirm_pressed.connect(_on_confirm)
+		chef.interact_requested.connect(_on_interact.bind(chef))
 		_kitchen.add_child(chef)
 		_kitchen.chefs.append(chef)
 
@@ -40,9 +55,59 @@ func _ready() -> void:
 	_hud.draw.connect(_draw_hud)
 	layer.add_child(_hud)
 
+	if _orders.scripted:
+		_tutorial = Tutorial.new(_kitchen, _orders)
+		var panel := PanelContainer.new()
+		panel.position = Vector2(244, 2)
+		panel.custom_minimum_size = Vector2(392, 40)
+		var style := StyleBoxFlat.new()
+		style.bg_color = UiStyle.PANEL
+		style.border_color = Color("f2c94c")
+		style.set_border_width_all(1)
+		style.set_content_margin_all(4)
+		panel.add_theme_stylebox_override("panel", style)
+		_tutorial_label = Label.new()
+		_tutorial_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_tutorial_label.custom_minimum_size.x = 382
+		_tutorial_label.add_theme_font_size_override("font_size", 9)
+		panel.add_child(_tutorial_label)
+		layer.add_child(panel)
+
+	PlayerRegistry.players_changed.connect(_on_players_changed)
+	if Net.is_client():
+		_rpc_client_ready.rpc_id(1)
+
+
+func _physics_process(delta: float) -> void:
+	if Net.is_host():
+		for chef in _kitchen.chefs:
+			if chef.use_down and chef.held == null and not chef.frozen:
+				_kitchen.use(chef.target_cell(), delta)
+	if not Net.online:
+		return
+	_net_frame += 1
+	if _net_frame % NET_SEND_EVERY != 0:
+		return
+	if Net.is_host():
+		var snapshot := _snapshot()
+		_ready_peers = _ready_peers.filter(func(p): return multiplayer.get_peers().has(p))
+		for peer in _ready_peers:
+			_rpc_snapshot.rpc_id(peer, snapshot)
+	else:
+		for chef in _kitchen.chefs:
+			if chef.is_local:
+				_rpc_chef_state.rpc_id(1, chef.slot, chef.position, chef.facing, chef.use_down, chef.emote_left)
+
 
 func _process(delta: float) -> void:
-	if not _finished:
+	if _tutorial:
+		_tutorial.update()
+		_tutorial_label.text = _tutorial.text()
+		if _tutorial.is_finished() and not _finished:
+			GameState.mark_tutorial_done()
+			_tutorial_label.get_parent().hide()
+			_finish()
+	elif not _finished and Net.is_host():
 		_time_left = maxf(_time_left - delta, 0.0)
 		if _time_left == 0.0:
 			_finish()
@@ -65,23 +130,27 @@ func _draw_hud() -> void:
 	# Pedidos.
 	for i in _orders.orders.size():
 		var order := _orders.orders[i]
-		var rect := Rect2(8 + i * 76, 4, 70, 36)
+		var rect := Rect2(8 + i * 134, 4, 130, 36)
 		_hud.draw_rect(rect, UiStyle.PANEL)
 		var plate := Item.plate()
 		plate.contents.assign(order["recipe"]["needs"])
 		ItemArt.draw_item(_hud, plate, rect.position + Vector2(14, 15))
-		_hud.draw_string(font, rect.position + Vector2(26, 14), order["recipe"]["name"],
-			HORIZONTAL_ALIGNMENT_LEFT, 44, 8, UiStyle.TEXT)
+		_hud.draw_string(font, rect.position + Vector2(27, 12), order["recipe"]["name"],
+			HORIZONTAL_ALIGNMENT_LEFT, 100, 9, UiStyle.TEXT)
+		_hud.draw_string(font, rect.position + Vector2(27, 23), order["recipe"]["hint"],
+			HORIZONTAL_ALIGNMENT_LEFT, 102, 7, UiStyle.MUTED)
+		if _tutorial:
+			continue
 		var t: float = order["time_left"] / OrderManager.ORDER_TIME
-		var bar := Rect2(rect.position + Vector2(4, 28), Vector2(62, 4))
+		var bar := Rect2(rect.position + Vector2(4, 28), Vector2(122, 4))
 		_hud.draw_rect(bar, UiStyle.BG)
 		_hud.draw_rect(Rect2(bar.position, Vector2(bar.size.x * t, 4)), Color("e8574d").lerp(Color("6fcf6a"), t))
-	# Pontos e tempo.
-	var secs := ceili(_time_left)
-	_hud.draw_string(font, Vector2(500, 18), "%d:%02d" % [secs / 60, secs % 60],
-		HORIZONTAL_ALIGNMENT_RIGHT, 132, 16, UiStyle.TEXT)
-	_hud.draw_string(font, Vector2(500, 36), "Pontos: %d" % _orders.score,
-		HORIZONTAL_ALIGNMENT_RIGHT, 132, 12, Color("f2c94c"))
+	if not _tutorial:
+		var secs := ceili(_time_left)
+		_hud.draw_string(font, Vector2(500, 18), "%d:%02d" % [secs / 60, secs % 60],
+			HORIZONTAL_ALIGNMENT_RIGHT, 132, 16, UiStyle.TEXT)
+		_hud.draw_string(font, Vector2(500, 36), "Pontos: %d" % _orders.score,
+			HORIZONTAL_ALIGNMENT_RIGHT, 132, 12, Color("f2c94c"))
 	# FPS para medir o desempenho em PCs fracos.
 	_hud.draw_string(font, Vector2(4, 356), "FPS %d" % Engine.get_frames_per_second(),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiStyle.MUTED)
@@ -89,11 +158,15 @@ func _draw_hud() -> void:
 	if _finished:
 		_hud.draw_rect(Rect2(Vector2.ZERO, Vector2(640, 360)), Color(0, 0, 0, 0.7))
 		var lines := [
+			["Tutorial concluído!", 28, UiStyle.TEXT],
+			["Já sabes fazer salada e sopa. Agora é a sério: 3 minutos e pedidos com tempo.", 10, UiStyle.TEXT],
+			["Carrega em pegar para ir jogar", 10, UiStyle.MUTED],
+		] if _tutorial else [
 			["Fim do serviço!", 28, UiStyle.TEXT],
 			["Entregues: %d   ·   Falhados: %d" % [_orders.delivered_count, _orders.failed_count], 12, UiStyle.TEXT],
 			["Pontos: %d" % _orders.score, 20, Color("f2c94c")],
 			["★".repeat(_stars()) + "☆".repeat(3 - _stars()), 28, Color("f2c94c")],
-			["Carrega em pegar para voltar ao lobby", 10, UiStyle.MUTED],
+			["À espera do anfitrião..." if Net.is_client() else "Carrega em pegar para voltar ao lobby", 10, UiStyle.MUTED],
 		]
 		var y := 110.0
 		for line in lines:
@@ -101,10 +174,115 @@ func _draw_hud() -> void:
 			y += line[1] + 14
 
 
+func _on_interact(chef: Chef) -> void:
+	if Net.is_client():
+		_rpc_interact.rpc_id(1, chef.slot, chef.position, chef.facing)
+	elif not chef.frozen:
+		_kitchen.interact(chef, chef.target_cell())
+
+
+func _on_pause() -> void:
+	if Net.is_host():
+		_back_to_lobby()
+
+
+## Um jogador saiu da sala: o chef dele desaparece.
+func _on_players_changed() -> void:
+	for chef in _kitchen.chefs.duplicate():
+		if PlayerRegistry.get_player(chef.slot).is_empty():
+			_kitchen.chefs.erase(chef)
+			chef.queue_free()
+
+
+func _snapshot() -> Array:
+	var chefs := _kitchen.chefs.map(func(c: Chef):
+		return [c.slot, c.position, c.facing, Item.serialize(c.held), c.use_down, c.emote_left])
+	var stations := []
+	for station: Station in _kitchen.stations.values():
+		var data: Variant = station.serialize()
+		if data != null:
+			stations.append([station.cell, data])
+	return [chefs, stations, _orders.serialize(), _time_left, _finished]
+
+
+func _chef_for_slot(slot: int) -> Chef:
+	for chef in _kitchen.chefs:
+		if chef.slot == slot:
+			return chef
+	return null
+
+
+## Chef de um jogador remoto, só se o PC que enviou for mesmo o dono dele.
+func _remote_chef(slot: int) -> Chef:
+	var player := PlayerRegistry.get_player(slot)
+	if player.is_empty() or player["peer"] != multiplayer.get_remote_sender_id():
+		return null
+	return _chef_for_slot(slot)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _rpc_client_ready() -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	if multiplayer.is_server() and not _ready_peers.has(peer):
+		_ready_peers.append(peer)
+
+
+@rpc("any_peer", "call_remote", "unreliable_ordered")
+func _rpc_chef_state(slot: int, pos: Vector2, dir: Vector2, use: bool, emote: float) -> void:
+	var chef := _remote_chef(slot)
+	if chef:
+		chef.net_target = pos
+		chef.facing = dir
+		chef.use_down = use
+		chef.emote_left = emote
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _rpc_interact(slot: int, pos: Vector2, dir: Vector2) -> void:
+	var chef := _remote_chef(slot)
+	if chef and not chef.frozen:
+		# A posição do pedido manda: o pacote de movimento pode ainda não ter chegado.
+		chef.position = pos
+		chef.net_target = pos
+		chef.facing = dir
+		_kitchen.interact(chef, chef.target_cell())
+
+
+@rpc("authority", "call_remote", "unreliable_ordered")
+func _rpc_snapshot(data: Array) -> void:
+	for c in data[0]:
+		var chef := _chef_for_slot(c[0])
+		if chef == null:
+			continue
+		chef.held = Item.deserialize(c[3])
+		if not chef.is_local:
+			chef.net_target = c[1]
+			chef.facing = c[2]
+			chef.use_down = c[4]
+			chef.emote_left = c[5]
+	var by_cell := {}
+	for s in data[1]:
+		by_cell[s[0]] = s[1]
+	for station: Station in _kitchen.stations.values():
+		station.apply(by_cell.get(station.cell))
+	_orders.apply(data[2])
+	_time_left = data[3]
+	if data[4] and not _finished:
+		_finish()
+
+
 func _on_confirm() -> void:
-	if _finished:
+	if not _finished or Net.is_client():
+		return
+	if _tutorial:
+		GameState.mode = GameState.Mode.PLAY
+		get_tree().reload_current_scene.call_deferred()
+	else:
 		_back_to_lobby()
 
 
 func _back_to_lobby() -> void:
-	get_tree().change_scene_to_file.call_deferred("res://scenes/lobby.tscn")
+	if Net.online:
+		Net.return_to_lobby.rpc()
+	else:
+		get_tree().change_scene_to_file.call_deferred("res://scenes/lobby.tscn")

@@ -32,6 +32,10 @@ var stations := {}  # Vector2i -> Station
 var spawns := {}  # slot -> Vector2
 var chefs: Array[Chef] = []
 var orders: OrderManager
+## Só o anfitrião faz as estações avançar (cozinhar, queimar).
+var simulate := true
+## Células assinaladas com uma seta (usado pelo tutorial).
+var hint_cells: Array[Vector2i] = []
 
 
 func _init(p_orders: OrderManager) -> void:
@@ -74,8 +78,9 @@ func use(cell: Vector2i, delta: float) -> void:
 
 
 func _process(delta: float) -> void:
-	for station: Station in stations.values():
-		station.tick(delta)
+	if simulate:
+		for station: Station in stations.values():
+			station.tick(delta)
 	queue_redraw()
 
 
@@ -90,6 +95,11 @@ func _draw() -> void:
 		var cell := chef.target_cell()
 		if stations.has(cell):
 			draw_rect(Rect2(Vector2(cell) * TILE, Vector2(TILE, TILE)).grow(-1), chef.color, false, 2.0)
+	var bob := sin(Time.get_ticks_msec() / 150.0) * 2.0
+	for cell in hint_cells:
+		var tip := cell_center(cell) + Vector2(0, -TILE * 0.6 + bob)
+		draw_colored_polygon(PackedVector2Array([tip, tip + Vector2(-6, -8), tip + Vector2(6, -8)]), Color("f2c94c"))
+		draw_polyline(PackedVector2Array([tip, tip + Vector2(-6, -8), tip + Vector2(6, -8), tip]), UiStyle.BG, 1.0)
 
 
 func _draw_station(station: Station) -> void:

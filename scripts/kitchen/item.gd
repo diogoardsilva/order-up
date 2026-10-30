@@ -22,6 +22,20 @@ static func plate() -> Item:
 	return ingredient(Kind.PLATE)
 
 
+## Para enviar pela rede: [kind, chopped, contents] ou null.
+static func serialize(item: Item) -> Variant:
+	return null if item == null else [item.kind, item.chopped, item.contents]
+
+
+static func deserialize(data: Variant) -> Item:
+	if data == null:
+		return null
+	var item := ingredient(data[0])
+	item.chopped = data[1]
+	item.contents.assign(data[2])
+	return item
+
+
 func is_plate() -> bool:
 	return kind == Kind.PLATE
 

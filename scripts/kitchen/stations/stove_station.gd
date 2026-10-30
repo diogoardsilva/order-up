@@ -51,6 +51,19 @@ func is_burning_soon() -> bool:
 	return state == State.READY and _timer > BURN_TIME * 0.5
 
 
+func _get_extra() -> Variant:
+	return null if state == State.EMPTY else [state, tomatoes, _timer]
+
+
+func _set_extra(extra: Variant) -> void:
+	if extra == null:
+		_reset()
+	else:
+		state = extra[0]
+		tomatoes = extra[1]
+		_timer = extra[2]
+
+
 func _reset() -> void:
 	state = State.EMPTY
 	tomatoes = 0

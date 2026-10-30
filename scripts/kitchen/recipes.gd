@@ -2,8 +2,8 @@ class_name Recipes
 ## Receitas do jogo. No M4 passam para ficheiros de dados por nível.
 
 const ALL: Array[Dictionary] = [
-	{"id": "salad", "name": "Salada", "needs": ["lettuce_chopped", "tomato_chopped"], "points": 20},
-	{"id": "soup", "name": "Sopa", "needs": ["soup"], "points": 30},
+	{"id": "salad", "name": "Salada", "hint": "alface e tomate cortados", "needs": ["lettuce_chopped", "tomato_chopped"], "points": 20},
+	{"id": "soup", "name": "Sopa", "hint": "2 tomates cortados, fogão", "needs": ["soup"], "points": 30},
 ]
 
 ## Ingredientes que se podem pôr diretamente num prato.
