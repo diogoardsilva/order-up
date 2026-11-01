@@ -9,8 +9,9 @@ const KITCHEN_OFFSET := Vector2(80, 44)
 const WORLD_SCALE := 2.0
 ## Frames de física entre envios (60 / 3 = 20 por segundo).
 const NET_SEND_EVERY := 3
-## Lugar do ajudante (os jogadores são 0 a 3).
+## Lugar do primeiro ajudante (os jogadores são 0 a 3; os ajudantes 4 e 5).
 const HELPER_SLOT := 4
+const HELPER_COLORS: Array[Color] = [Color("9aa4b4"), Color("b49a7a")]
 
 var _orders: OrderManager
 var _level: Dictionary
@@ -76,8 +77,10 @@ func _ready() -> void:
 		chef.throw_requested.connect(_on_throw.bind(chef))
 		_kitchen.add_child(chef)
 		_kitchen.chefs.append(chef)
-	if GameState.helper != GameState.Helper.NONE and not _orders.scripted:
-		_add_helper()
+	if not _orders.scripted:
+		for i in GameState.helpers.size():
+			if GameState.HELPER_PRESETS[GameState.helpers[i]][1] >= 0:
+				_add_helper(i, GameState.helpers[i])
 
 	var layer := CanvasLayer.new()
 	layer.layer = 2
@@ -138,6 +141,8 @@ func _process(delta: float) -> void:
 	if _tutorial:
 		_tutorial.update()
 		_tutorial_label.text = _tutorial.text()
+		# Por baixo dos cartões de pedidos.
+		_tutorial_label.get_parent().position.y = maxf(_tickets_bottom + 8.0, 120.0)
 		if _tutorial.is_finished() and not _finished:
 			GameState.mark_tutorial_done()
 			_tutorial_label.get_parent().hide()
@@ -201,6 +206,7 @@ func _draw_hud() -> void:
 	# Com pós-processamento a vinheta é feita no shader.
 	if Gfx.post == 0 and Gfx.lighting > 0:
 		_hud.draw_texture_rect(_vignette, Rect2(Vector2.ZERO, Vector2(1280, 720)), false)
+	_draw_world_labels()
 	_draw_tickets()
 	_draw_players()
 	if not _tutorial:
@@ -259,22 +265,37 @@ func _draw_tickets() -> void:
 		if n > _dish_last.get(id, 0):
 			_dish_pulse[id] = 1.0
 		var pulse: float = _dish_pulse.get(id, 0.0)
-		var rect := Rect2(Vector2(x, y), Vector2(w, 66))
+		var hint: String = recipe["hint"]
+		var hint_h := font.get_multiline_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, w - 14, 13, 3).y
+		var raw := _raw_ingredients(recipe)
+		var rect := Rect2(Vector2(x, y), Vector2(w, 40 + hint_h + 36))
 		if pulse > 0.0:
 			_hud.draw_rect(rect.grow(2 + pulse * 3), Color(UiStyle.GOLD, pulse))
 		_hud.draw_style_box(UiStyle.paper_box(), rect)
 		var plate := Item.plate()
 		plate.contents.assign(recipe["needs"])
-		_hud.draw_set_transform(rect.position + Vector2(22, 22), 0.0, Vector2(2, 2))
+		_hud.draw_set_transform(rect.position + Vector2(20, 18), 0.0, Vector2(2, 2))
 		ItemArt.draw_item(_hud, plate, Vector2.ZERO)
 		_hud.draw_set_transform(Vector2.ZERO)
-		_hud.draw_string(font, rect.position + Vector2(42, 25), _fit(recipe["name"], 74, 20, 13), HORIZONTAL_ALIGNMENT_LEFT, 76, _fit_size(recipe["name"], 74, 20, 13), UiStyle.INK)
-		# Quantos faltam, em grande.
-		var count_rect := Rect2(rect.position + Vector2(w - 40, 6), Vector2(34, 26))
+		# Quantos faltam, num autocolante por cima do prato.
+		var count_rect := Rect2(rect.position + Vector2(22, 20), Vector2(24, 16))
+		_hud.draw_rect(count_rect.grow(1), UiStyle.INK)
 		_hud.draw_rect(count_rect, Color("a02530"))
-		_hud.draw_string(font, count_rect.position + Vector2(0, 21), "x%d" % n, HORIZONTAL_ALIGNMENT_CENTER, count_rect.size.x, 22, UiStyle.TEXT)
-		_hud.draw_multiline_string(font, rect.position + Vector2(8, 46), recipe["hint"],
-			HORIZONTAL_ALIGNMENT_LEFT, w - 14, 13, 2, UiStyle.INK_SOFT)
+		_hud.draw_string(font, count_rect.position + Vector2(0, 14), "x%d" % n, HORIZONTAL_ALIGNMENT_CENTER, count_rect.size.x, 17, UiStyle.TEXT)
+		var name: String = recipe["name"]
+		var name_size := _fit_size(name, w - 54, 21, 13)
+		_hud.draw_string(font, rect.position + Vector2(50, 25), name, HORIZONTAL_ALIGNMENT_LEFT, w - 54, name_size, UiStyle.INK)
+		# Os ingredientes crus, desenhados e com o nome, para se reconhecerem nas caixas.
+		var cell_w := (w - 8) / maxf(raw.size(), 1)
+		for k in raw.size():
+			var at := rect.position + Vector2(4 + cell_w * (k + 0.5), 52)
+			_hud.draw_set_transform(at, 0.0, Vector2(1.5, 1.5))
+			ItemArt.draw_content(_hud, raw[k], Vector2.ZERO)
+			_hud.draw_set_transform(Vector2.ZERO)
+			var raw_name: String = Levels.SINGULAR.get(raw[k], Levels.INGREDIENT_NAMES.get(raw[k], raw[k]))
+			_hud.draw_string(font, at + Vector2(-cell_w / 2.0, 20), raw_name, HORIZONTAL_ALIGNMENT_CENTER, cell_w, _fit_size(raw_name, cell_w - 2, 13, 10), UiStyle.INK)
+		_hud.draw_multiline_string(font, rect.position + Vector2(8, 49 + 36), hint,
+			HORIZONTAL_ALIGNMENT_LEFT, w - 14, 13, 3, UiStyle.INK_SOFT)
 		y += rect.size.y + 6
 	for id in _dish_pulse.keys():
 		_dish_pulse[id] = maxf(_dish_pulse[id] - get_process_delta_time() * 2.5, 0.0)
@@ -302,10 +323,11 @@ func _draw_tickets() -> void:
 			_hud.draw_string(font, rect.position + Vector2(48, 24), "! anotar pedido", HORIZONTAL_ALIGNMENT_LEFT, w - 52, 17, Color(UiStyle.RED, a))
 		else:
 			var missing := customer.missing()
+			var step := minf(25.0, (w - 70.0) / maxf(missing.size() - 1, 1))
 			for k in missing.size():
 				var plate := Item.plate()
 				plate.contents.assign(missing[k]["needs"])
-				_hud.draw_set_transform(rect.position + Vector2(60 + k * 25, 19), 0.0, Vector2(1.5, 1.5))
+				_hud.draw_set_transform(rect.position + Vector2(58 + k * step, 19), 0.0, Vector2(1.5, 1.5))
 				ItemArt.draw_item(_hud, plate, Vector2.ZERO)
 				_hud.draw_set_transform(Vector2.ZERO)
 		if not _tutorial:
@@ -315,6 +337,56 @@ func _draw_tickets() -> void:
 			_hud.draw_rect(Rect2(bar.position, Vector2(bar.size.x * t, bar.size.y)), UiStyle.RED.lerp(UiStyle.GREEN, t))
 		y += rect.size.y + 5
 	_tickets_bottom = y
+
+
+## Nomes por cima do mundo, para se perceber que ingrediente é cada um: o nome
+## em cada caixa, o que cada chef leva na mão e o que está na estação para onde
+## um jogador está virado. Desenhados na HUD para ficarem nítidos.
+func _draw_world_labels() -> void:
+	if _finished:
+		return
+	for station: Station in _kitchen.stations.values():
+		if station is CrateStation:
+			var name: String = Levels.INGREDIENT_NAMES.get((station as CrateStation).ingredient, "")
+			_tag(_to_screen(_kitchen.cell_center(station.cell) + Vector2(0, 8)), name, 14, UiStyle.PAPER, UiStyle.INK)
+	for chef in _kitchen.chefs:
+		if chef.held:
+			_tag(_to_screen(chef.position + Vector2(0, -27)), Levels.item_name(chef.held), 15, Color("fff8e6"), chef.color.darkened(0.45))
+		if chef.slot >= HELPER_SLOT or not chef.is_local:
+			continue
+		var target := _kitchen.station_at(chef.target_cell())
+		if target and target.item and not target is CrateStation:
+			_tag(_to_screen(_kitchen.cell_center(target.cell) + Vector2(0, -15)), Levels.item_name(target.item), 13, Color(UiStyle.INK, 0.85), UiStyle.TEXT)
+
+
+func _to_screen(kitchen_pos: Vector2) -> Vector2:
+	return _kitchen.position + kitchen_pos * WORLD_SCALE
+
+
+## Etiqueta centrada num ponto do ecrã.
+func _tag(center: Vector2, text: String, size: int, bg: Color, fg: Color) -> void:
+	if text.is_empty():
+		return
+	var w := UiStyle.FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x + 8
+	var rect := Rect2((center - Vector2(w / 2.0, size * 0.55)).round(), Vector2(w, size + 2))
+	_hud.draw_rect(rect.grow(1), UiStyle.INK)
+	_hud.draw_rect(rect, bg)
+	_hud.draw_string(UiStyle.FONT, rect.position + Vector2(4, size * 0.8), text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, fg)
+
+
+## Ingredientes crus de um prato (sem repetir), pela ordem da receita.
+func _raw_ingredients(recipe: Dictionary) -> Array:
+	var result := []
+	for need: String in recipe["needs"]:
+		var parts: Array = [need]
+		for cr in Recipes.COOK:
+			if cr["out"] == need:
+				parts = cr["in"]
+		for part: String in parts:
+			var raw := part.trim_suffix("_chopped")
+			if not result.has(raw):
+				result.append(raw)
+	return result
 
 
 ## Título pequeno de uma secção da coluna da esquerda. Devolve o y seguinte.
@@ -330,25 +402,25 @@ func _fit_size(text: String, width: float, size: int, min_size: int) -> int:
 	return size
 
 
-func _fit(text: String, _width: float, _size: int, _min: int) -> String:
-	return text
-
-
-## Retratos dos jogadores na coluna da esquerda.
+## Retratos dos jogadores e dos ajudantes na coluna da direita (compactos,
+## para caberem 4 jogadores e 2 ajudantes).
 func _draw_players() -> void:
 	var y := 150.0 if not _tutorial else 10.0
+	var h := 112.0 if _kitchen.chefs.size() <= 4 else 86.0
 	for chef in _kitchen.chefs:
-		var rect := Rect2(1130, y, 140, 112)
+		var rect := Rect2(1130, y, 140, h)
 		_hud.draw_style_box(UiStyle.panel_box(), rect)
 		var bob := roundf(sin(_clock * 3.0 + chef.slot) * 2.0)
-		var top_left := rect.position + Vector2(46, 14 + bob)
-		_hud.draw_set_transform(top_left, 0.0, Vector2(3, 3))
+		var s := 3.0 if h > 100 else 2.4
+		var top_left := rect.position + Vector2(70 - 8 * s, 10 + bob)
+		_hud.draw_set_transform(top_left, 0.0, Vector2(s, s))
 		Art.frame(_hud, Art.CHEFS[chef.character], Art.CHEF_FRAME, 0, 0, Vector2.ZERO)
 		Art.frame(_hud, Art.CHEF_TINT, Art.CHEF_FRAME, 0, 0, Vector2.ZERO, false, chef.color)
 		_hud.draw_set_transform(Vector2.ZERO)
-		_hud.draw_string(UiStyle.FONT, rect.position + Vector2(0, 104), ("Ajudante" if chef.slot == HELPER_SLOT else "P%d %s" % [chef.slot + 1, Art.CHEF_NAMES[chef.character]]),
+		var label := _helper_name(chef.slot) if chef.slot >= HELPER_SLOT else "P%d %s" % [chef.slot + 1, Art.CHEF_NAMES[chef.character]]
+		_hud.draw_string(UiStyle.FONT, rect.position + Vector2(0, h - 8), label,
 			HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 16, chef.color.darkened(0.35))
-		y += 122
+		y += h + 8
 
 
 func _draw_results() -> void:
@@ -422,16 +494,21 @@ func _on_pause() -> void:
 ## Um jogador saiu da sala: o chef dele desaparece.
 ## O ajudante controlado pelo jogo (empregado de mesa ou cozinheiro). Só o
 ## anfitrião o faz pensar; nos outros PCs segue as posições recebidas.
-func _add_helper() -> void:
-	var waiter := GameState.helper == GameState.Helper.WAITER
+func _add_helper(index: int, preset: int) -> void:
+	var role: int = GameState.HELPER_PRESETS[preset][1]
+	var zone: int = GameState.HELPER_PRESETS[preset][2]
 	var chef := Chef.new()
-	chef.slot = HELPER_SLOT
-	chef.color = Color("9aa4b4")
-	chef.character = 2 if waiter else 4
+	chef.slot = HELPER_SLOT + index
+	chef.color = HELPER_COLORS[index]
+	chef.character = [2, 4, 5, 3][role]
 	chef.kitchen = _kitchen
-	chef.position = _kitchen.cell_center(Vector2i(15, 5) if waiter else Vector2i(9, 9))
+	# Começa no sítio do trabalho dele (o segundo um pouco ao lado).
+	var start: Vector2i = {
+		HelperAI.Role.WAITER: Vector2i(15, 5), HelperAI.Role.HOST: Vector2i(17, 7), HelperAI.Role.RUNNER: Vector2i(12, 6),
+	}.get(role, [Vector2i(9, 5), Vector2i(9, 2), Vector2i(9, 10)][zone])
+	chef.position = _kitchen.cell_center(start + Vector2i(index, 0))
 	chef.is_local = not Net.is_client()
-	var brain := HelperAI.new(HelperAI.Role.WAITER if waiter else HelperAI.Role.COOK, chef, _kitchen, _orders)
+	var brain := HelperAI.new(role as HelperAI.Role, chef, _kitchen, _orders, zone as HelperAI.Zone)
 	chef.source = BotSource.new(brain)
 	chef.interact_requested.connect(_on_interact.bind(chef))
 	chef.throw_requested.connect(_on_throw.bind(chef))
@@ -439,9 +516,15 @@ func _add_helper() -> void:
 	_kitchen.chefs.append(chef)
 
 
+## Nome curto do ajudante para o retrato.
+func _helper_name(slot: int) -> String:
+	var preset: int = GameState.helpers[slot - HELPER_SLOT]
+	return ["Empregado", "Cozinheiro", "Host", "Corredor"][GameState.HELPER_PRESETS[preset][1]]
+
+
 func _on_players_changed() -> void:
 	for chef in _kitchen.chefs.duplicate():
-		if chef.slot != HELPER_SLOT and PlayerRegistry.get_player(chef.slot).is_empty():
+		if chef.slot < HELPER_SLOT and PlayerRegistry.get_player(chef.slot).is_empty():
 			_kitchen.chefs.erase(chef)
 			chef.queue_free()
 

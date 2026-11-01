@@ -3,16 +3,26 @@ extends Node
 ## opções guardadas (ecrã inteiro e volumes). F11 ou Alt+Enter troca o ecrã inteiro.
 
 enum Mode { PLAY, TUTORIAL }
-## Ajudante controlado pelo jogo.
-enum Helper { NONE, WAITER, COOK }
-const HELPER_NAMES: Array[String] = ["Sem ajudante", "Empregado de mesa", "Cozinheiro"]
+## Ajudantes controlados pelo jogo (até 2). Cada opção: [nome, papel, zona, descrição],
+## com o papel e a zona de HelperAI (papel -1 = sem ajudante).
+const HELPER_PRESETS: Array = [
+	["Nenhum", -1, 0, "Sem ajudante neste lugar."],
+	["Empregado de mesa", 0, 0, "Anota pedidos, leva os pratos do passe às mesas, cobra e lava a loiça."],
+	["Host (anota e cobra)", 2, 0, "Recebe os clientes: anota os pedidos e cobra na caixa. Não leva pratos."],
+	["Corredor (passe > mesas)", 3, 0, "Leva os pratos prontos do passe às mesas e os sujos para o lava-loiça."],
+	["Cozinheiro (zona de cima)", 1, 1, "Cozinha só na zona de cima e deixa os pratos no passe de cima."],
+	["Cozinheiro (zona de baixo)", 1, 2, "Cozinha só na zona de baixo e deixa os pratos no passe de baixo."],
+	["Cozinheiro (cozinha toda)", 1, 0, "Cozinha onde estiver livre e deixa os pratos no passe."],
+]
+const MAX_HELPERS := 2
 
 const SAVE_PATH := "user://save.cfg"
 
 var mode := Mode.PLAY
 ## Restaurante escolhido (índice em Levels.ALL).
 var level := 0
-var helper := Helper.WAITER
+## Opção escolhida para cada ajudante (índice em HELPER_PRESETS).
+var helpers: Array = [1, 0]
 var tutorial_done := false
 var last_ip := ""
 ## Mensagem a mostrar no menu (ex. ligação perdida).
@@ -36,6 +46,9 @@ func _ready() -> void:
 		fullscreen = cfg.get_value("options", "fullscreen", true)
 		music_volume = cfg.get_value("options", "music_volume", 0.5)
 		sfx_volume = cfg.get_value("options", "sfx_volume", 0.8)
+		var saved: Variant = cfg.get_value("progress", "helpers", helpers)
+		if saved is Array and saved.size() == MAX_HELPERS:
+			helpers = saved.map(func(h): return clampi(int(h), 0, HELPER_PRESETS.size() - 1))
 	_apply_window()
 	_apply_volumes()
 
@@ -94,6 +107,11 @@ func save_stars(level_id: String, stars: int) -> void:
 func mark_tutorial_done() -> void:
 	tutorial_done = true
 	_save("progress", "tutorial_done", true)
+
+
+func set_helpers(value: Array) -> void:
+	helpers = value.duplicate()
+	_save("progress", "helpers", helpers)
 
 
 func remember_ip(ip: String) -> void:

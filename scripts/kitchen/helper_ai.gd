@@ -1,16 +1,24 @@
 class_name HelperAI
 extends RefCounted
-## Ajudante controlado pelo jogo. Como empregado de mesa anota pedidos, leva os
-## pratos prontos às mesas, cobra na caixa e trata da loiça. Como cozinheiro
-## prepara os pedidos dos talões e deixa os pratos prontos numa bancada.
+## Ajudante controlado pelo jogo. Papéis:
+## - Empregado de mesa: anota pedidos, leva os pratos às mesas, cobra e lava a loiça.
+## - Host: recebe os clientes (anota os pedidos) e cobra na caixa.
+## - Corredor: leva os pratos do passe às mesas e os sujos ao lava-loiça.
+## - Cozinheiro: prepara os pedidos e deixa os pratos prontos no passe.
+## O cozinheiro pode ficar numa zona da cozinha (cima ou baixo). Com dois
+## ajudantes, nenhum vai a uma estação que o outro já foi buscar.
 ## Só corre no anfitrião: carrega nos "botões" de um BotSource como um jogador.
 
-enum Role { WAITER, COOK }
+enum Role { WAITER, COOK, HOST, RUNNER }
+enum Zone { ALL, TOP, BOTTOM }
+## Fila do meio da cozinha (caixas de ingredientes), partilhada pelas duas zonas.
+const MIDDLE_ROW := 6
 
 ## Tempo máximo numa tarefa antes de desistir e pensar outra vez.
 const TASK_TIMEOUT := 12.0
 
 var role: Role
+var zone: Zone
 var chef: Chef
 var kitchen: Kitchen
 var orders: OrderManager
@@ -31,11 +39,13 @@ var _last_pos := Vector2.ZERO
 var _last_delta := 0.0
 
 
-func _init(p_role: Role, p_chef: Chef, p_kitchen: Kitchen, p_orders: OrderManager) -> void:
+func _init(p_role: Role, p_chef: Chef, p_kitchen: Kitchen, p_orders: OrderManager, p_zone := Zone.ALL) -> void:
 	role = p_role
+	zone = p_zone
 	chef = p_chef
 	kitchen = p_kitchen
 	orders = p_orders
+	kitchen.helpers.append(self)
 	var size := Vector2i(Kitchen.LAYOUT[0].length(), Kitchen.LAYOUT.size())
 	_astar.region = Rect2i(Vector2i.ZERO, size)
 	_astar.cell_size = Vector2.ONE
@@ -150,15 +160,40 @@ func _go(cell: Vector2i, action := "pick", until := Callable()) -> Dictionary:
 	return {"cell": cell, "action": action, "until": until}
 
 
+## Outro ajudante já vai para esta estação?
+func _claimed(cell: Vector2i) -> bool:
+	for h in kitchen.helpers:
+		if h != self and h._task.get("cell", Vector2i(-99, -99)) == cell:
+			return true
+	return false
+
+
+## A estação fica na zona deste ajudante? (o salão e a fila do meio contam para todos)
+func _in_zone(station: Station) -> bool:
+	if zone == Zone.ALL or station.cell.x > Kitchen.DINING_FROM_X:
+		return true
+	if station.cell.y == MIDDLE_ROW:
+		return true
+	return station.cell.y < MIDDLE_ROW if zone == Zone.TOP else station.cell.y > MIDDLE_ROW
+
+
 # --- Escolha da tarefa -----------------------------------------------------------
 
 func _choose() -> Dictionary:
-	return _choose_waiter() if role == Role.WAITER else _choose_cook()
+	return _choose_cook() if role == Role.COOK else _choose_waiter()
 
 
-## Estações que cumprem o filtro e a que se consegue chegar, das mais perto para as mais longe.
+## Estações que cumprem o filtro e a que se consegue chegar, das mais perto para
+## as mais longe. Fica de fora o que outro ajudante já foi buscar (menos as
+## caixas, o lixo e as pilhas de pratos, que dão para todos) e, se houver, o que
+## é de outra zona.
 func _stations(filter: Callable) -> Array:
-	var result := kitchen.stations.values().filter(func(s): return _reachable(s) and filter.call(s))
+	var shared := func(s): return s is CrateStation or s is TrashStation or s is PlateStation
+	var result := kitchen.stations.values().filter(func(s): return _reachable(s) and filter.call(s) \
+		and (shared.call(s) or not _claimed(s.cell)))
+	var mine := result.filter(_in_zone)
+	if not mine.is_empty():
+		result = mine
 	var here := chef.position
 	result.sort_custom(func(a, b): return kitchen.cell_center(a.cell).distance_to(here) < kitchen.cell_center(b.cell).distance_to(here))
 	return result
@@ -185,7 +220,19 @@ func _free_counter(near_dining := false) -> Station:
 	return counters[0] if not counters.is_empty() else null
 
 
+## Bancada ou passe com um prato pousado.
+func _is_counter(s: Station) -> bool:
+	return s.get_script() == Station or s is PassStation
+
+
+func _free_pass() -> Station:
+	var passes := _stations(func(s): return s is PassStation and s.item == null)
+	return passes[0] if not passes.is_empty() else null
+
+
 func _choose_waiter() -> Dictionary:
+	var takes_orders := role != Role.RUNNER
+	var carries := role != Role.HOST
 	var held := chef.held
 	if held != null:
 		if held.is_plate() and not held.contents.is_empty():
@@ -193,14 +240,16 @@ func _choose_waiter() -> Dictionary:
 			if held.second == null:
 				var wanted := _wanted_ids()
 				wanted.erase(Recipes.match_plate(held.contents).get("id", ""))
-				var other := _stations(func(s): return s.get_script() == Station and s.item != null and s.item.is_plate() \
+				var other := _stations(func(s): return _is_counter(s) and s.item != null and s.item.is_plate() \
 					and wanted.has(Recipes.match_plate(s.item.contents).get("id", "")))
 				if not other.is_empty() and kitchen.cell_center(other[0].cell).distance_to(chef.position) < Kitchen.TILE * 6:
 					return _go(other[0].cell)
 			for c in orders.customers:
 				if c.is_waiting() and (c.wants(held) or (held.second and c.wants(held.second))):
 					return _go(c.table.cell)
-			var spot := _free_counter(true)
+			var spot := _free_pass()
+			if spot == null:
+				spot = _free_counter(true)
 			return _go(spot.cell) if spot else {}
 		if held.is_plate() and held.dirty:
 			if held.stack < Item.MAX_STACK:
@@ -217,13 +266,16 @@ func _choose_waiter() -> Dictionary:
 			return _go(spot.cell)
 		return _go(trash[0].cell) if not trash.is_empty() else {}
 	# Mãos vazias.
-	for c in orders.customers:
-		if c.is_calling():
-			return _go(c.table.cell)
-	if orders.front_of_queue():
-		var payer := orders.front_of_queue()
-		return _go(kitchen.register.cell, "use", func(): return orders.front_of_queue() != payer)
-	var ready := _stations(func(s): return s.get_script() == Station and s.item != null and s.item.is_plate() \
+	if takes_orders:
+		for c in orders.customers:
+			if c.is_calling() and not _claimed(c.table.cell):
+				return _go(c.table.cell)
+		if orders.front_of_queue() and not _claimed(kitchen.register.cell):
+			var payer := orders.front_of_queue()
+			return _go(kitchen.register.cell, "use", func(): return orders.front_of_queue() != payer)
+	if not carries:
+		return {}
+	var ready := _stations(func(s): return _is_counter(s) and s.item != null and s.item.is_plate() \
 		and orders.customers.any(func(c): return c.is_waiting() and c.wants(s.item)))
 	if not ready.is_empty():
 		return _go(ready[0].cell)
@@ -261,6 +313,10 @@ func _next_recipe() -> Dictionary:
 	for c in kitchen.chefs:
 		if c.held and c.held.is_plate():
 			ready.append(Recipes.match_plate(c.held.contents).get("id", ""))
+	# O que o outro cozinheiro já está a fazer.
+	for h in kitchen.helpers:
+		if h != self and h.role == Role.COOK and not h._job.is_empty():
+			ready.append(h._job["recipe"]["id"])
 	for o in orders.orders:
 		var id: String = o["recipe"]["id"]
 		if ready.has(id):
@@ -277,6 +333,14 @@ func _crate_for(kind: String) -> Station:
 
 func _choose_cook() -> Dictionary:
 	var held := chef.held
+	# Um prato pronto na mão vai para o passe, para o empregado o levar.
+	if held and held.is_plate() and not held.dirty and not _job.get("carry", false) \
+			and not Recipes.match_plate(held.contents).is_empty():
+		_job.clear()
+		var spot := _free_pass()
+		if spot == null:
+			spot = _free_counter()
+		return _go(spot.cell) if spot else {}
 	if _job.is_empty() or not _job_plate_ok():
 		_job.clear()
 		var recipe := _next_recipe()
@@ -310,18 +374,31 @@ func _choose_cook() -> Dictionary:
 	var missing: Array = _job["recipe"]["needs"].duplicate()
 	for id in plate.contents:
 		missing.erase(id)
+	# Os fogões do que já está no prato ficam livres para o resto.
+	var claimed: Dictionary = _job.get("stoves", {})
+	for product in claimed.keys():
+		if not missing.has(product):
+			claimed.erase(product)
 	if carrying:
 		# Com o prato na mão: serve-o de uma panela pronta, ou volta a pousá-lo.
 		for need in missing:
 			var stove := _stove_for(need, false)
 			if stove and stove.item.cook_state == Item.Cook.READY:
 				return _go(stove.cell)
+		if missing.is_empty():
+			# Ficou completo na mão: no próximo passo vai para o passe.
+			_job.clear()
+			return {}
 		_job.erase("carry")
 		return _go(plate_station.cell)
 	if missing.is_empty():
-		# Pronto: fica na bancada para alguém o levar.
+		# Pronto: leva-o para o passe (se já não estiver lá).
 		_job.clear()
-		return _put_away() if held else {}
+		if held:
+			return _put_away()
+		if not plate_station is PassStation and _free_pass() != null:
+			return _go(plate_station.cell)
+		return {}
 	# O que tem na mão serve para alguma coisa? Senão, larga-o.
 	if held and not _held_useful(missing):
 		return _put_away()
@@ -378,6 +455,9 @@ func _stove_for(product: String, claim: bool) -> StoveStation:
 	if not claim:
 		return null
 	var used: Array = stoves.values()
+	for h in kitchen.helpers:
+		if h != self and not h._job.is_empty():
+			used.append_array(h._job.get("stoves", {}).values())
 	var free := _stations(func(s): return s is StoveStation and s.item != null and s.item.cook_state == Item.Cook.EMPTY and not used.has(s.cell))
 	if free.is_empty():
 		return null

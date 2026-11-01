@@ -1,8 +1,9 @@
 extends Control
 ## Escolha do restaurante: um cartão por nível com a decoração do país, os
-## pratos e as melhores estrelas. Esquerda/direita escolhe o restaurante,
-## cima/baixo o ajudante, pegar começa e dash volta ao lobby. Online só o
-## anfitrião escolhe; os outros veem a escolha.
+## pratos e as melhores estrelas. Por baixo, os dois ajudantes controlados
+## pelo jogo. Cima/baixo escolhe a linha (restaurante, ajudante 1, ajudante 2),
+## esquerda/direita muda-a, pegar começa e dash volta ao lobby. Online só o
+## host escolhe; os outros veem a escolha.
 
 const CARD_SIZE := Vector2(224, 400)
 const GAP := 18.0
@@ -12,7 +13,10 @@ var _shown := 0.0  # posição animada do cartão selecionado
 var _time := 0.0
 var _last_x := {}
 var _last_y := {}
-var _helper_label: Label
+var _helper_labels: Array[Label] = []
+var _desc_label: Label
+## Linha escolhida: 0 = restaurantes, 1 e 2 = ajudantes.
+var _row := 0
 var _cards: Control
 
 
@@ -30,22 +34,28 @@ func _ready() -> void:
 	_cards.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_cards.draw.connect(_draw_cards)
 	add_child(_cards)
-	_helper_label = UiStyle.label("", 28, UiStyle.GOLD, 8)
-	_helper_label.position = Vector2(0, 590)
-	_helper_label.size = Vector2(1280, 40)
-	add_child(_helper_label)
+	for i in GameState.MAX_HELPERS:
+		var l := UiStyle.label("", 26, UiStyle.TEXT, 8)
+		l.position = Vector2(0, 562 + i * 34)
+		l.size = Vector2(1280, 36)
+		add_child(l)
+		_helper_labels.append(l)
 	_refresh_helper()
+	_desc_label = UiStyle.label("", 19, UiStyle.MUTED, 6)
+	_desc_label.position = Vector2(0, 630)
+	_desc_label.size = Vector2(1280, 30)
+	add_child(_desc_label)
 	var help := UiStyle.label(_help_text(), 22, UiStyle.TEXT, 6)
-	help.position = Vector2(0, 652)
+	help.position = Vector2(0, 668)
 	help.size = Vector2(1280, 40)
 	add_child(help)
 	for source in DeviceManager.all_sources():
 		source.poll()
 		_last_x[source] = source.move.x
 		_last_y[source] = source.move.y
-	Net.level_choice_changed.connect(func(i: int, helper: int):
+	Net.level_choice_changed.connect(func(i: int, helpers: Array):
 		_index = i
-		GameState.helper = helper as GameState.Helper
+		GameState.helpers = helpers.duplicate()
 		_refresh_helper()
 		Sfx.play("ui_move"))
 	Sfx.music_on()
@@ -54,11 +64,17 @@ func _ready() -> void:
 func _help_text() -> String:
 	if Net.is_client():
 		return "O anfitrião está a escolher o restaurante..."
-	return "Restaurante: esquerda / direita      Ajudante: cima / baixo      Começar: pegar      Voltar: dash"
+	return "Cima / baixo: escolher a linha      Esquerda / direita: mudar      Começar: pegar      Voltar: dash"
 
 
 func _refresh_helper() -> void:
-	_helper_label.text = "Ajudante:  < %s >" % GameState.HELPER_NAMES[GameState.helper]
+	for i in _helper_labels.size():
+		var name: String = GameState.HELPER_PRESETS[GameState.helpers[i]][0]
+		var focused := _row == i + 1
+		_helper_labels[i].text = ("> Ajudante %d:  < %s >" if focused else "Ajudante %d:  %s") % [i + 1, name]
+		_helper_labels[i].add_theme_color_override("font_color", UiStyle.GOLD if focused else UiStyle.TEXT)
+	if _desc_label:
+		_desc_label.text = GameState.HELPER_PRESETS[GameState.helpers[_row - 1]][3] if _row > 0 else ""
 
 
 func _can_choose(source: InputSource) -> bool:
@@ -81,21 +97,26 @@ func _process(delta: float) -> void:
 		if not _can_choose(source):
 			continue
 		if absf(y) > 0.5 and absf(last_y) <= 0.5:
-			GameState.helper = wrapi(GameState.helper + (1 if y > 0.0 else -1), 0, GameState.HELPER_NAMES.size()) as GameState.Helper
+			_row = clampi(_row + (1 if y > 0.0 else -1), 0, GameState.MAX_HELPERS)
 			_refresh_helper()
 			Sfx.play("ui_move")
-			if Net.online:
-				Net.set_level_choice.rpc(_index, GameState.helper)
 		if absf(x) > 0.5 and absf(last) <= 0.5:
-			_index = clampi(_index + (1 if x > 0.0 else -1), 0, Levels.ALL.size() - 1)
+			var dir := 1 if x > 0.0 else -1
+			if _row == 0:
+				_index = clampi(_index + dir, 0, Levels.ALL.size() - 1)
+			else:
+				var helpers := GameState.helpers.duplicate()
+				helpers[_row - 1] = posmod(helpers[_row - 1] + dir, GameState.HELPER_PRESETS.size())
+				GameState.set_helpers(helpers)
+				_refresh_helper()
 			Sfx.play("ui_move")
 			if Net.online:
-				Net.set_level_choice.rpc(_index, GameState.helper)
+				Net.set_level_choice.rpc(_index, GameState.helpers)
 		elif source.just_pressed(&"pick"):
 			Sfx.play("ui_confirm")
 			GameState.level = _index
 			if Net.online:
-				Net.start_level.rpc(_index, GameState.helper)
+				Net.start_level.rpc(_index, GameState.helpers)
 			else:
 				GameState.mode = GameState.Mode.PLAY
 				Transition.go("res://scenes/level.tscn")
@@ -120,7 +141,7 @@ func _draw_cards() -> void:
 		var selected := i == _index
 		var focus := clampf(1.0 - absf(_shown - i), 0.0, 1.0)
 		var s := 1.0 + 0.06 * focus
-		var center := Vector2(start_x + i * (CARD_SIZE.x + GAP) + CARD_SIZE.x / 2.0, 360 - 10 * focus + (sin(_time * 3.0) * 2.0 if selected else 0.0))
+		var center := Vector2(start_x + i * (CARD_SIZE.x + GAP) + CARD_SIZE.x / 2.0, 338 - 10 * focus + (sin(_time * 3.0) * 2.0 if selected else 0.0))
 		_cards.draw_set_transform(center, 0.0, Vector2(s, s))
 		var rect := Rect2(-CARD_SIZE / 2.0, CARD_SIZE)
 		if selected:

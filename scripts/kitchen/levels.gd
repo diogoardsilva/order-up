@@ -47,6 +47,58 @@ const INGREDIENT_NAMES := {
 }
 
 
+## Nome do que sai do fogão.
+const PRODUCT_NAMES := {
+	"soup": "Sopa", "caldo": "Caldo verde", "steak_cooked": "Bife grelhado", "egg_fried": "Ovo estrelado",
+	"fries": "Batata frita", "bras": "Bacalhau à Brás", "rice_cooked": "Arroz cozido", "patty_cooked": "Carne grelhada",
+	"pizza": "Pizza", "pasta_cooked": "Esparguete cozido",
+}
+## Nome de um ingrediente no singular (para o que se leva na mão).
+const SINGULAR := {"egg": "Ovo", "potato": "Batata"}
+
+
+## Nome de um conteúdo, ex. "potato_chopped" -> "Batata cortada".
+static func content_name(id: String) -> String:
+	if PRODUCT_NAMES.has(id):
+		return PRODUCT_NAMES[id]
+	var raw := id.trim_suffix("_chopped")
+	var name: String = SINGULAR.get(raw, INGREDIENT_NAMES.get(raw, raw))
+	if id.ends_with("_chopped"):
+		# Concorda com o género: "Batata cortada", "Bacalhau cortado".
+		name += " cortada" if name.ends_with("a") or name == "Couve" or name == "Alface" else " cortado"
+	return name
+
+
+## Nome do que um chef leva: ingrediente, prato (o nome do prato se estiver
+## completo) ou panela com o que tem dentro.
+static func item_name(item: Item) -> String:
+	if item == null:
+		return ""
+	if item.is_ingredient():
+		return content_name(item.content_id())
+	if item.is_plate():
+		if item.dirty:
+			return "Pratos sujos" if item.stack > 1 else "Prato sujo"
+		if item.contents.is_empty():
+			return "%d pratos" % item.stack if item.stack > 1 else "Prato vazio"
+		var dish := Recipes.match_plate(item.contents)
+		var text: String = dish["name"] if not dish.is_empty() else " + ".join(item.contents.map(content_name))
+		if item.second:
+			text += " e " + item_name(item.second)
+		return text
+	if item.is_cookware():
+		var tool: String = {"pot": "Panela", "pan": "Frigideira", "oven": "Forno"}.get(item.tool, "Panela")
+		match item.cook_state:
+			Item.Cook.READY:
+				return "%s: %s pronto" % [tool, content_name(item.product)]
+			Item.Cook.BURNT:
+				return "%s: queimado!" % tool
+		if item.contents.is_empty():
+			return tool
+		return "%s: %s" % [tool, " + ".join(item.contents.map(content_name))]
+	return ""
+
+
 static func get_level(index: int) -> Dictionary:
 	return ALL[clampi(index, 0, ALL.size() - 1)]
 
