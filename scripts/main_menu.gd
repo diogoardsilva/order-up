@@ -66,7 +66,7 @@ func _ready() -> void:
 	_join_box = HBoxContainer.new()
 	_join_box.add_theme_constant_override("separation", 10)
 	_ip_edit = LineEdit.new()
-	_ip_edit.placeholder_text = "IP do anfitrião"
+	_ip_edit.placeholder_text = "IP do host"
 	_ip_edit.text = GameState.last_ip
 	_ip_edit.custom_minimum_size = Vector2(220, 56)
 	_ip_edit.text_submitted.connect(func(_t): _join())

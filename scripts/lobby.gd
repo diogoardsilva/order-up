@@ -104,8 +104,8 @@ func _room_text() -> String:
 	if not Net.online:
 		return ""
 	if Net.is_host():
-		return "Sala online aberta. IP para os amigos: %s (porta %d)" % [" ou ".join(Net.local_addresses()), Net.PORT]
-	return "Ligado à sala. Só o anfitrião pode começar."
+		return "És o host. IP para os amigos: %s (porta %d)" % [" ou ".join(Net.local_addresses()), Net.PORT]
+	return "Ligado à sala. Só o host pode começar."
 
 
 func _refresh() -> void:

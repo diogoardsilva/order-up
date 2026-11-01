@@ -320,7 +320,7 @@ func _draw_tickets() -> void:
 		_hud.draw_string(font, badge.position + Vector2(0, 19), "M%d" % customer.table.number, HORIZONTAL_ALIGNMENT_CENTER, badge.size.x, 20, UiStyle.TEXT)
 		if customer.is_calling():
 			var a := 0.6 + 0.4 * sin(_clock * 6.0)
-			_hud.draw_string(font, rect.position + Vector2(48, 24), "! anotar pedido", HORIZONTAL_ALIGNMENT_LEFT, w - 52, 17, Color(UiStyle.RED, a))
+			_hud.draw_string(font, rect.position + Vector2(48, 24), "! anotar", HORIZONTAL_ALIGNMENT_LEFT, w - 52, 19, Color(UiStyle.RED, a))
 		else:
 			var missing := customer.missing()
 			var step := minf(25.0, (w - 70.0) / maxf(missing.size() - 1, 1))
@@ -454,7 +454,7 @@ func _draw_results() -> void:
 		var tex := Art.STAR if full else Art.STAR_EMPTY
 		var size := tex.get_size() * s / 2.0
 		_hud.draw_texture_rect(tex, Rect2(center - size / 2.0, size), false)
-	_prompt(Vector2(x, y + 395), w, "À espera do anfitrião..." if Net.is_client() else "Carrega em pegar para voltar ao lobby")
+	_prompt(Vector2(x, y + 395), w, "À espera do host..." if Net.is_client() else "Carrega em pegar para voltar ao lobby")
 
 
 func _prompt(at: Vector2, width: float, text: String) -> void:

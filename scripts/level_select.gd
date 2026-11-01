@@ -63,7 +63,7 @@ func _ready() -> void:
 
 func _help_text() -> String:
 	if Net.is_client():
-		return "O anfitrião está a escolher o restaurante..."
+		return "O host está a escolher o restaurante..."
 	return "Cima / baixo: escolher a linha      Esquerda / direita: mudar      Começar: pegar      Voltar: dash"
 
 
