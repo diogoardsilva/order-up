@@ -7,20 +7,21 @@ class_name Levels
 ## Legenda: . chão, C bancada (parede no salão), a-e caixas de ingredientes
 ## (pela ordem de "crates"), B tábua de cortar, S fogão, P pratos limpos,
 ## W lava-loiça, X lixo, M mesa para 2, N/n mesa para 4 (metade de cima/baixo),
-## R caixa registadora, E porta de entrada dos clientes, 1-4 início dos chefs.
+## R caixa registadora, H passe (balcão com campainha entre a cozinha e o salão,
+## onde se deixam os pratos prontos), E porta de entrada dos clientes, 1-4 início dos chefs.
 const LAYOUT: Array[String] = [
 	"CCBBCSSCCCCCCCCCCCCC",
-	"C..........C.......C",
-	"C..1.......C.M..N..C",
-	"C......3...C....n..C",
+	"C..........H.......C",
+	"C..1.......H.M..N..C",
+	"C......3...H....n..C",
 	"P..........C.M.....C",
 	"W..................C",
 	"X.CabcdeC.......R..C",
 	"W..........C.......C",
 	"P..........C.M.....C",
-	"C......4...C....N..C",
-	"C..2.......C.M..n..C",
-	"C..........C.......E",
+	"C......4...H....N..C",
+	"C..2.......H.M..n..C",
+	"C..........H.......E",
 	"CCBBCSSCCCCCCCCCCCCC",
 ]
 

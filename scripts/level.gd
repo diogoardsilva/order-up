@@ -9,7 +9,6 @@ const KITCHEN_OFFSET := Vector2(80, 44)
 const WORLD_SCALE := 2.0
 ## Frames de física entre envios (60 / 3 = 20 por segundo).
 const NET_SEND_EVERY := 3
-const TICKET_SIZE := Vector2(146, 114)
 ## Lugar do ajudante (os jogadores são 0 a 3).
 const HELPER_SLOT := 4
 
@@ -27,7 +26,9 @@ var _ready_peers: Array[int] = []
 var _net_frame := 0
 # Animações da HUD.
 var _clock := 0.0
-var _ticket_born := {}  # id do cliente -> momento em que o talão apareceu
+var _dish_last := {}  # id do prato -> quantos faltavam no último frame
+var _dish_pulse := {}  # id do prato -> brilho quando aumenta
+var _tickets_bottom := 0.0
 var _shown_score := 0.0
 var _score_pulse := 0.0
 var _last_score := 0
@@ -50,10 +51,8 @@ func _ready() -> void:
 	_kitchen.scale = Vector2.ONE * WORLD_SCALE
 	add_child(_kitchen)
 	_orders.kitchen = _kitchen
-	# Um pouco mais escuro e quente, para as luzes se notarem.
-	var tint := CanvasModulate.new()
-	tint.color = Color(0.93, 0.88, 0.84)
-	add_child(tint)
+	# Cor, vinheta e bloom por cima do mundo (conforme as opções de gráficos).
+	add_child(PostFX.new(1))
 	if Net.is_client():
 		_orders.process_mode = Node.PROCESS_MODE_DISABLED
 		_kitchen.simulate = false
@@ -81,6 +80,7 @@ func _ready() -> void:
 		_add_helper()
 
 	var layer := CanvasLayer.new()
+	layer.layer = 2
 	add_child(layer)
 	_hud = Control.new()
 	_hud.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -163,6 +163,8 @@ func _process(delta: float) -> void:
 		while _stars_played < stars and _finish_time > 1.0 + _stars_played * 0.45:
 			_stars_played += 1
 			Sfx.play("coin", 0.0, 0.0)
+	# Ao longo da ronda a luz passa de fim de tarde a noite (iluminação Ultra).
+	_kitchen.evening = 0.15 + 0.85 * (1.0 - _time_left / ROUND_TIME) if not _tutorial else 0.3
 	_hud.queue_redraw()
 
 
@@ -196,7 +198,9 @@ func _draw_hud() -> void:
 		tex.width = 128
 		tex.height = 72
 		_vignette = tex
-	_hud.draw_texture_rect(_vignette, Rect2(Vector2.ZERO, Vector2(1280, 720)), false)
+	# Com pós-processamento a vinheta é feita no shader.
+	if Gfx.post == 0 and Gfx.lighting > 0:
+		_hud.draw_texture_rect(_vignette, Rect2(Vector2.ZERO, Vector2(1280, 720)), false)
 	_draw_tickets()
 	_draw_players()
 	if not _tutorial:
@@ -226,55 +230,108 @@ func _draw_hud() -> void:
 		_hud.draw_string(font, banner.position + Vector2(0, 48), _level["name"], HORIZONTAL_ALIGNMENT_CENTER, banner.size.x, 40, Color(UiStyle.INK, a))
 		_hud.draw_string(font, banner.position + Vector2(0, 78), _level["place"], HORIZONTAL_ALIGNMENT_CENTER, banner.size.x, 22, Color(UiStyle.INK_SOFT, a))
 	# FPS para medir o desempenho em PCs fracos.
-	_hud.draw_string(font, Vector2(8, 712), "FPS %d" % Engine.get_frames_per_second(),
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 14, UiStyle.MUTED)
+	if Gfx.show_fps:
+		_hud.draw_string(font, Vector2(8, 712), "FPS %d" % Engine.get_frames_per_second(),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, UiStyle.MUTED)
 	if _finished:
 		_draw_results()
 
 
 func _draw_tickets() -> void:
-	# Coluna da esquerda, de cima para baixo, para não tapar a cozinha.
+	# Coluna da esquerda, em duas partes, para nunca passar do ecrã:
+	# 1. "Para cozinhar": um cartão por prato do menu, com quantos faltam e a receita.
+	# 2. "Mesas": um cartão por grupo, do mais impaciente para o menos, com o que
+	#    falta e a paciência. Quem ainda não fez o pedido aparece com "!".
 	var font := UiStyle.FONT
-	var alive := {}
-	for i in _orders.orders.size():
-		var order := _orders.orders[i]
-		var id: int = order["id"]
-		alive[id] = true
-		if not _ticket_born.has(id):
-			_ticket_born[id] = _clock
-		var age: float = _clock - _ticket_born[id]
-		var slide := 1.0 - ease(clampf(age / 0.35, 0.0, 1.0), -2.0)
-		var t: float = order["time_left"] / order["max_time"]
-		var shake := Vector2(sin(_clock * 40.0) * 2.0, 0) if t < 0.25 and not _tutorial else Vector2.ZERO
-		# Com muitos talões, sobrepõem-se como uma pilha (vê-se o topo de cada um).
-		var step := minf(122.0, (700.0 - TICKET_SIZE.y) / maxf(1.0, _orders.orders.size() - 1))
-		var rect := Rect2(Vector2(8 - slide * 180, 10 + i * step) + shake, TICKET_SIZE)
+	var x := 6.0
+	var w := 148.0
+	var y := 8.0
+	var counts := {}
+	for order in _orders.orders:
+		var id: String = order["recipe"]["id"]
+		counts[id] = counts.get(id, 0) + 1
+	var dishes: Array = _orders.menu.filter(func(r): return counts.has(r["id"]))
+	if not dishes.is_empty():
+		y = _hud_header(Vector2(x, y), w, "Para cozinhar")
+	for recipe in dishes:
+		var id: String = recipe["id"]
+		var n: int = counts[id]
+		if n > _dish_last.get(id, 0):
+			_dish_pulse[id] = 1.0
+		var pulse: float = _dish_pulse.get(id, 0.0)
+		var rect := Rect2(Vector2(x, y), Vector2(w, 66))
+		if pulse > 0.0:
+			_hud.draw_rect(rect.grow(2 + pulse * 3), Color(UiStyle.GOLD, pulse))
 		_hud.draw_style_box(UiStyle.paper_box(), rect)
 		var plate := Item.plate()
-		plate.contents.assign(order["recipe"]["needs"])
-		_hud.draw_set_transform(rect.position + Vector2(28, 30), 0.0, Vector2(2, 2))
+		plate.contents.assign(recipe["needs"])
+		_hud.draw_set_transform(rect.position + Vector2(22, 22), 0.0, Vector2(2, 2))
 		ItemArt.draw_item(_hud, plate, Vector2.ZERO)
 		_hud.draw_set_transform(Vector2.ZERO)
-		# Nomes compridos ("Bacalhau à Brás") encolhem para caber.
-		var name: String = order["recipe"]["name"]
-		var name_size := 22
-		while name_size > 13 and font.get_string_size(name, HORIZONTAL_ALIGNMENT_LEFT, -1, name_size).x > 88:
-			name_size -= 1
-		_hud.draw_string(font, rect.position + Vector2(54, 28), name, HORIZONTAL_ALIGNMENT_LEFT, 90, name_size, UiStyle.INK)
-		var badge := Rect2(rect.position + Vector2(54, 34), Vector2(40, 20))
+		_hud.draw_string(font, rect.position + Vector2(42, 25), _fit(recipe["name"], 74, 20, 13), HORIZONTAL_ALIGNMENT_LEFT, 76, _fit_size(recipe["name"], 74, 20, 13), UiStyle.INK)
+		# Quantos faltam, em grande.
+		var count_rect := Rect2(rect.position + Vector2(w - 40, 6), Vector2(34, 26))
+		_hud.draw_rect(count_rect, Color("a02530"))
+		_hud.draw_string(font, count_rect.position + Vector2(0, 21), "x%d" % n, HORIZONTAL_ALIGNMENT_CENTER, count_rect.size.x, 22, UiStyle.TEXT)
+		_hud.draw_multiline_string(font, rect.position + Vector2(8, 46), recipe["hint"],
+			HORIZONTAL_ALIGNMENT_LEFT, w - 14, 13, 2, UiStyle.INK_SOFT)
+		y += rect.size.y + 6
+	for id in _dish_pulse.keys():
+		_dish_pulse[id] = maxf(_dish_pulse[id] - get_process_delta_time() * 2.5, 0.0)
+	_dish_last = counts
+
+	var groups: Array = _orders.customers.filter(func(c: Customer): return c.is_waiting() or c.is_calling())
+	groups.sort_custom(func(a: Customer, b: Customer): return a.patience / a.max_patience < b.patience / b.max_patience)
+	if not groups.is_empty():
+		y = _hud_header(Vector2(x, y + 2), w, "Mesas")
+	var shown := 0
+	for customer: Customer in groups:
+		if y > 700 - 52:
+			_hud.draw_string(font, Vector2(x, y + 16), "+%d mesas" % (groups.size() - shown), HORIZONTAL_ALIGNMENT_CENTER, w, 18, UiStyle.TEXT)
+			break
+		shown += 1
+		var t := customer.patience / customer.max_patience
+		var shake := Vector2(sin(_clock * 40.0) * 2.0, 0) if t < 0.25 and not _tutorial else Vector2.ZERO
+		var rect := Rect2(Vector2(x, y) + shake, Vector2(w, 46))
+		_hud.draw_style_box(UiStyle.paper_box(), rect)
+		var badge := Rect2(rect.position + Vector2(6, 6), Vector2(36, 24))
 		_hud.draw_rect(badge, Color("a02530"))
-		_hud.draw_string(font, badge.position + Vector2(0, 16), "M%d" % order["table"], HORIZONTAL_ALIGNMENT_CENTER, 40, 16, UiStyle.TEXT)
-		_hud.draw_multiline_string(font, rect.position + Vector2(10, 74), order["recipe"]["hint"],
-			HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 20, 14, 2, UiStyle.INK_SOFT)
-		if _tutorial:
-			continue
-		var bar := Rect2(rect.position + Vector2(10, rect.size.y - 16), Vector2(rect.size.x - 20, 7))
-		_hud.draw_rect(bar.grow(2), UiStyle.INK)
-		_hud.draw_rect(bar, Color("c9a877"))
-		_hud.draw_rect(Rect2(bar.position, Vector2(bar.size.x * t, bar.size.y)), UiStyle.RED.lerp(UiStyle.GREEN, t))
-	for id in _ticket_born.keys():
-		if not alive.has(id):
-			_ticket_born.erase(id)
+		_hud.draw_string(font, badge.position + Vector2(0, 19), "M%d" % customer.table.number, HORIZONTAL_ALIGNMENT_CENTER, badge.size.x, 20, UiStyle.TEXT)
+		if customer.is_calling():
+			var a := 0.6 + 0.4 * sin(_clock * 6.0)
+			_hud.draw_string(font, rect.position + Vector2(48, 24), "! anotar pedido", HORIZONTAL_ALIGNMENT_LEFT, w - 52, 17, Color(UiStyle.RED, a))
+		else:
+			var missing := customer.missing()
+			for k in missing.size():
+				var plate := Item.plate()
+				plate.contents.assign(missing[k]["needs"])
+				_hud.draw_set_transform(rect.position + Vector2(60 + k * 25, 19), 0.0, Vector2(1.5, 1.5))
+				ItemArt.draw_item(_hud, plate, Vector2.ZERO)
+				_hud.draw_set_transform(Vector2.ZERO)
+		if not _tutorial:
+			var bar := Rect2(rect.position + Vector2(8, rect.size.y - 11), Vector2(rect.size.x - 16, 5))
+			_hud.draw_rect(bar.grow(1), UiStyle.INK)
+			_hud.draw_rect(bar, Color("c9a877"))
+			_hud.draw_rect(Rect2(bar.position, Vector2(bar.size.x * t, bar.size.y)), UiStyle.RED.lerp(UiStyle.GREEN, t))
+		y += rect.size.y + 5
+	_tickets_bottom = y
+
+
+## Título pequeno de uma secção da coluna da esquerda. Devolve o y seguinte.
+func _hud_header(at: Vector2, width: float, text: String) -> float:
+	UiStyle.shadow_text(_hud, at + Vector2(4, 16), text, 18, UiStyle.GOLD)
+	return at.y + 24
+
+
+## Nomes compridos ("Bacalhau à Brás") encolhem para caber.
+func _fit_size(text: String, width: float, size: int, min_size: int) -> int:
+	while size > min_size and UiStyle.FONT.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > width:
+		size -= 1
+	return size
+
+
+func _fit(text: String, _width: float, _size: int, _min: int) -> String:
+	return text
 
 
 ## Retratos dos jogadores na coluna da esquerda.
