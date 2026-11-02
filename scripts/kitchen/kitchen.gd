@@ -364,6 +364,7 @@ func _draw_floor_detail(ci: CanvasItem) -> void:
 			for s in [up, down]:
 				if s is BoardStation or s is StoveStation or s is SinkStation or s is CrateStation:
 					_blob(ci, cell_center(cell), Vector2(30, 22), 0.0, 0.06)
+	_draw_kitchen_floor(ci)
 	# Tapetes debaixo das mesas grandes, com a cor do restaurante.
 	var rug: Color = RUG_COLORS.get(_theme(), RUG_COLORS["classic"])
 	for table in tables():
@@ -377,6 +378,54 @@ func _draw_floor_detail(ci: CanvasItem) -> void:
 		for k in range(int(r.position.x) + 2, int(r.end.x) - 1, 3):
 			ci.draw_rect(Rect2(Vector2(k, r.position.y - 2), Vector2(1, 2)), rug.lightened(0.3))
 			ci.draw_rect(Rect2(Vector2(k, r.end.y), Vector2(1, 2)), rug.lightened(0.3))
+
+
+## Tapetes de borracha onde os cozinheiros param (fogões, tábuas e lava-loiças)
+## e ralos no chão da cozinha. Só com texturas médias ou melhores.
+func _draw_kitchen_floor(ci: CanvasItem) -> void:
+	if Gfx.textures < 1:
+		return
+	var mat := Color("6a5048")
+	var spans: Array[Rect2] = []
+	# Linhas de cima e de baixo: um tapete comprido em frente a cada grupo seguido de tábuas/fogões.
+	for y: int in [0, LAYOUT.size() - 1]:
+		var row: int = y + 1 if y == 0 else y - 1
+		var start := -1
+		for x in range(DINING_FROM_X):
+			var s: Station = stations.get(Vector2i(x, y))
+			var work := s is BoardStation or s is StoveStation
+			if work and start < 0:
+				start = x
+			if (not work or x == DINING_FROM_X - 1) and start >= 0:
+				var end := x if not work else x + 1
+				spans.append(Rect2(Vector2(start * TILE + 2, row * TILE + (2 if y == 0 else 6)), Vector2((end - start) * TILE - 4, TILE - 8)))
+				start = -1
+	# Coluna dos lava-loiças, à esquerda.
+	for station: Station in stations.values():
+		if station is SinkStation and station.cell.x == 0:
+			spans.append(Rect2(Vector2(TILE + 2, station.cell.y * TILE + 3), Vector2(TILE - 6, TILE - 6)))
+	for r in spans:
+		ci.draw_rect(Rect2(r.position + Vector2(1, 2), r.size), Color(0, 0, 0, 0.18))
+		ci.draw_rect(r, mat)
+		ci.draw_rect(r.grow(-1), mat.lightened(0.08), false, 1.0)
+		# Furinhos da borracha em grelha.
+		var yy := r.position.y + 4
+		while yy < r.end.y - 2:
+			var xx := r.position.x + 4 + (2 if int(yy) % 6 == 0 else 0)
+			while xx < r.end.x - 2:
+				ci.draw_rect(Rect2(Vector2(xx, yy), Vector2(2, 2)), mat.darkened(0.22))
+				xx += 5
+			yy += 4
+	# Ralos de inox no chão.
+	for at: Vector2 in [Vector2(5.5, 3.5), Vector2(5.5, 9.5), Vector2(9.5, 6.5)]:
+		var c: Vector2 = at * TILE
+		var cell := Vector2i(c / TILE)
+		if stations.has(cell):
+			continue
+		ci.draw_rect(Rect2(c - Vector2(5, 5), Vector2(10, 10)), Color("6f6a70"))
+		ci.draw_rect(Rect2(c - Vector2(4, 4), Vector2(8, 8)), Color("a7a3a8"))
+		for k in 3:
+			ci.draw_rect(Rect2(c + Vector2(-3, -3 + k * 2.5), Vector2(6, 1.2)), Color("4b464c"))
 
 
 func _draw_static_shadows(ci: CanvasItem) -> void:
@@ -913,6 +962,10 @@ func _draw() -> void:
 	if Gfx.textures >= 1:
 		for d in DECOR:
 			draw_texture(Art.SHELF if d[0] == "shelf" else Art.themed(_theme(), d[0]), d[1])
+		_draw_utensils(Vector2(96, -15))
+		_draw_utensils(Vector2(150, -15))
+		for at: Vector2 in [Vector2(18.5, 1.05)]:
+			_draw_plant(at * TILE)
 	for chef in chefs:
 		var cell := chef.target_cell()
 		var target := station_at(cell)
@@ -1095,6 +1148,49 @@ func table_wanting(plate: Item) -> int:
 
 
 ## Parede do salão: vista de frente quando há chão logo abaixo, senão só o topo.
+## Barra de inox com conchas, espátula e um tacho pendurados na parede da cozinha.
+func _draw_utensils(at: Vector2) -> void:
+	var steel := Color("b9b7bd")
+	var dark := Color("5d5960")
+	draw_rect(Rect2(at, Vector2(44, 2)), dark)
+	draw_rect(Rect2(at, Vector2(44, 1)), steel)
+	var sway := sin(_time * 1.3 + at.x) * 0.6 if Gfx.lighting >= 3 else 0.0
+	# Concha.
+	draw_line(at + Vector2(6, 2), at + Vector2(6 + sway, 11), steel, 1.0)
+	draw_circle(at + Vector2(6 + sway, 13), 2.5, steel)
+	draw_circle(at + Vector2(6 + sway, 12.5), 1.5, dark)
+	# Espátula.
+	draw_line(at + Vector2(14, 2), at + Vector2(14 + sway, 9), Color("6b4428"), 1.0)
+	draw_rect(Rect2(at + Vector2(12 + sway, 9), Vector2(4, 5)), steel)
+	# Batedor.
+	draw_line(at + Vector2(22, 2), at + Vector2(22 + sway, 7), Color("6b4428"), 1.0)
+	draw_arc(at + Vector2(22 + sway, 11), 3.0, 0, TAU, 8, steel, 1.0)
+	# Frigideira de cobre.
+	draw_line(at + Vector2(33, 2), at + Vector2(33 + sway, 6), dark, 1.0)
+	draw_circle(at + Vector2(33 + sway, 11), 5.5, Color("8a4a26"))
+	draw_circle(at + Vector2(33 + sway, 11), 4.0, Color("c06a35"))
+	draw_circle(at + Vector2(31.5 + sway, 9.5), 1.2, Color(1, 0.9, 0.7, 0.6))
+
+
+## Vaso com uma planta de folhas largas, num canto do salão.
+func _draw_plant(at: Vector2) -> void:
+	_blob(self, at + Vector2(0, 9), Vector2(18, 7), 0.0, 0.3)
+	var pot := PackedVector2Array([at + Vector2(-6, 1), at + Vector2(6, 1), at + Vector2(4.5, 10), at + Vector2(-4.5, 10)])
+	draw_colored_polygon(pot, Color("a4532e"))
+	draw_rect(Rect2(at + Vector2(-7, -1), Vector2(14, 3)), Color("c06a35"))
+	draw_rect(Rect2(at + Vector2(-7, -1), Vector2(14, 1)), Color("d98a52"))
+	var sway := sin(_time * 0.9 + at.x * 0.1) * 0.8
+	var leaf := Color("4f7a3a")
+	for k in 7:
+		var ang := -PI / 2 + (k - 3) * 0.42
+		var tip := at + Vector2(0, -2) + Vector2.from_angle(ang) * (11.0 - absf(k - 3) * 1.2) + Vector2(sway * (1.0 - absf(k - 3) / 3.0), 0)
+		var mid := (at + Vector2(0, -2) + tip) / 2.0
+		var side := Vector2.from_angle(ang + PI / 2) * 2.2
+		var shade := leaf.lightened(0.12 * (k % 2)) if k != 3 else leaf.lightened(0.2)
+		draw_colored_polygon(PackedVector2Array([at + Vector2(0, -1), mid + side, tip, mid - side]), shade)
+		draw_line(at + Vector2(0, -1), tip, leaf.darkened(0.3), 0.6)
+
+
 func _draw_wall(cell: Vector2i, rect: Rect2) -> void:
 	var below := cell + Vector2i.DOWN
 	var front := below.y < LAYOUT.size() and not stations.has(below)
