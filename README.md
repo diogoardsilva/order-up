@@ -88,11 +88,13 @@ No lobby, cada jogador escolhe o seu chef com esquerda/direita (6 personagens) e
 
 ## Perfis e conquistas
 
-Em **Perfis e conquistas** (menu principal) criam-se perfis com nome. Cada perfil tem as suas estatísticas e **197 conquistas** (servir pratos, cobrar, cortar, estrelas em cada restaurante, Casa Aberta, papéis, online...). Algumas são **escondidas** e só mostram o nome quando se ganham. Quando se ganha uma, aparece um aviso em cima. Os perfis ficam guardados neste PC.
+Em **Perfis e conquistas** (menu principal) criam-se perfis com nome. Cada perfil tem as suas estatísticas e **51 conquistas** (servir pratos, cobrar, cortar, estrelas em cada restaurante, Casa Aberta, online...). Dez são **escondidas** e só mostram o nome quando se ganham. Quando se ganha uma, aparece um aviso em cima com o nome e o porquê. Os perfis ficam guardados neste PC.
+
+**Amigos online** (Perfis e conquistas > Amigos online): cada perfil recebe um código de amigo de 6 letras. Escrevam o código dos outros para ficarem amigos; a lista mostra quem está online e, se um amigo tiver uma sala aberta, dá para entrar logo. Os perfis online ficam no Supabase do projeto (`supabase/migrations/`); o URL e a chave pública vão em `scripts/autoload/online.gd`.
 
 ## Gráficos
 
-Em **Opções > Gráficos** escolhe-se a qualidade (**Baixo, Médio, Alto, Ultra**) ou cada opção à parte: sombras, iluminação, texturas, pós-processamento, partículas e calor dos fogões, mais VSync, limite de FPS e mostrar FPS. O restaurante por trás do menu mostra logo o resultado. Na primeira vez o jogo sugere Médio em gráficas integradas (Intel, etc.) e Alto nas outras.
+Em **Opções > Gráficos** escolhe-se o **Ecrã** (Encher o ecrã, para ecrãs 16:10 como o Legion Go ou 4:3, sem barras pretas; ou 16:9 com barras), o tamanho da **Janela**, a qualidade (**Baixo, Médio, Alto, Ultra**) ou cada opção à parte: sombras, iluminação, texturas, pós-processamento, partículas e calor dos fogões, mais VSync, limite de FPS e mostrar FPS. O restaurante por trás do menu mostra logo o resultado. Na primeira vez o jogo sugere Médio em gráficas integradas (Intel, etc.) e Alto nas outras.
 
 O **Ultra** tem sombras que mudam com cada candeeiro, a luz a passar de fim de tarde a noite durante a ronda, chão polido com o reflexo das luzes, bloom, tapetes, pó nos raios de sol, faúlhas e o ar a tremer por cima dos fogões. Se o FPS cair, baixem primeiro as sombras ou o pós-processamento.
 

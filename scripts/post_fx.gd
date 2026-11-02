@@ -10,6 +10,7 @@ var _rect: ColorRect
 
 func _init(p_layer := 1) -> void:
 	layer = p_layer
+	set_meta("full_screen", true)
 
 
 func _ready() -> void:

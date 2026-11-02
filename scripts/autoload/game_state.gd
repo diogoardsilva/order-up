@@ -115,13 +115,10 @@ func _apply_window() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED)
-	if not fullscreen:
-		var screen := DisplayServer.screen_get_size()
-		var size := Vector2i(1280, 720)
-		if screen.x >= 1920 and screen.y >= 1080:
-			size = Vector2i(1600, 900)
-		DisplayServer.window_set_size(size)
-		DisplayServer.window_set_position((screen - size) / 2)
+	# O tamanho da janela (resolução) é escolhido em Screen.
+	var screen_node := get_node_or_null("/root/Screen")
+	if not fullscreen and screen_node:
+		screen_node.apply_window_size()
 
 
 func _apply_volumes() -> void:

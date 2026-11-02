@@ -14,6 +14,7 @@ config/icon="res://icon.svg"
 [autoload]
 
 GameState="*res://scripts/autoload/game_state.gd"
+Screen="*res://scripts/autoload/screen.gd"
 Gfx="*res://scripts/autoload/gfx.gd"
 Controls="*res://scripts/autoload/controls.gd"
 DeviceManager="*res://scripts/autoload/device_manager.gd"
@@ -22,6 +23,7 @@ Net="*res://scripts/autoload/net.gd"
 Sfx="*res://scripts/autoload/sfx.gd"
 Transition="*res://scripts/autoload/transition.gd"
 Profiles="*res://scripts/autoload/profiles.gd"
+Online="*res://scripts/autoload/online.gd"
 
 [display]
 

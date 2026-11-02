@@ -16,6 +16,7 @@ var _header: Label
 var _filter := 0  # 0 todas, 1 ganhas, 2 por ganhar
 var _filter_button: Button
 var _first: Button
+var _friends: FriendsMenu
 
 
 func _ready() -> void:
@@ -45,11 +46,13 @@ func _ready() -> void:
 	left.add_child(UiStyle.button("Mudar o nome", func():
 		if not _name_edit.text.strip_edges().is_empty():
 			Profiles.rename(Profiles.active, _name_edit.text)
+			Online.rename(Profiles.active)
 			_name_edit.text = ""
 			_refresh(), 340))
 	left.add_child(UiStyle.button("Apagar este perfil", func():
 		Profiles.remove(Profiles.active)
 		_refresh(), 340))
+	left.add_child(UiStyle.button("Amigos online", _show_friends, 340))
 	left.add_child(UiStyle.button("Voltar", func(): closed.emit(), 340))
 
 	var right := VBoxContainer.new()
@@ -79,6 +82,12 @@ func _ready() -> void:
 	_grid.add_theme_constant_override("h_separation", 10)
 	_grid.add_theme_constant_override("v_separation", 8)
 	_scroll.add_child(_grid)
+	_friends = FriendsMenu.new()
+	_friends.hide()
+	_friends.closed.connect(func():
+		_friends.hide()
+		focus_first())
+	add_child(_friends)
 	Profiles.changed.connect(_refresh)
 	_refresh()
 
@@ -86,6 +95,12 @@ func _ready() -> void:
 func focus_first() -> void:
 	if _first:
 		_first.grab_focus()
+
+
+func _show_friends() -> void:
+	Sfx.play("ui_confirm")
+	_friends.show()
+	_friends.focus_first()
 
 
 func _create() -> void:
@@ -154,7 +169,7 @@ func _draw_tile(tile: Control, a: Dictionary, got: bool, progress: float) -> voi
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if visible and event.is_action_pressed("ui_cancel") and not _name_edit.has_focus():
+	if visible and not _friends.visible and event.is_action_pressed("ui_cancel") and not _name_edit.has_focus():
 		get_viewport().set_input_as_handled()
 		Sfx.play("ui_back")
 		closed.emit()

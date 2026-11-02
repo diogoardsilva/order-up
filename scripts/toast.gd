@@ -3,8 +3,8 @@ extends Control
 ## Aviso de conquista: desce do topo, fica uns segundos e sobe. Se vierem
 ## várias de seguida, aparecem uma de cada vez.
 
-const SHOW_TIME := 3.6
-const SIZE := Vector2(430, 74)
+const SHOW_TIME := 4.5
+const SIZE := Vector2(470, 96)
 
 var _queue: Array = []
 var _current := {}
@@ -60,7 +60,9 @@ func _draw() -> void:
 	var x := rect.position.x + 72
 	var head := "Conquista%s · %s" % [" escondida" if a["hidden"] else "", _current["who"]]
 	draw_string(font, Vector2(x, rect.position.y + 26), head, HORIZONTAL_ALIGNMENT_LEFT, SIZE.x - 84, 15, UiStyle.INK_SOFT)
-	draw_string(font, Vector2(x, rect.position.y + 52), a["name"], HORIZONTAL_ALIGNMENT_LEFT, SIZE.x - 84, 24, UiStyle.INK)
+	draw_string(font, Vector2(x, rect.position.y + 50), a["name"], HORIZONTAL_ALIGNMENT_LEFT, SIZE.x - 84, 24, UiStyle.INK)
+	# Porque se ganhou: a condição da conquista.
+	draw_string(font, Vector2(x, rect.position.y + 74), a["desc"], HORIZONTAL_ALIGNMENT_LEFT, SIZE.x - 84, 16, UiStyle.INK_SOFT)
 
 
 ## Ícone simples de cada tipo de conquista, desenhado com primitivas.

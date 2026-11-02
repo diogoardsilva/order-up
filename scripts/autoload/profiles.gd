@@ -10,7 +10,7 @@ signal unlocked(profile_name: String, achievement: Dictionary)
 const SAVE_PATH := "user://profiles.cfg"
 const GUEST := -1
 
-## Cada perfil: {"name", "stats": {}, "unlocked": {id: unix time}}
+## Cada perfil: {"name", "stats": {}, "unlocked": {id: unix time}, "online": {"code", "secret"}}
 var profiles: Array[Dictionary] = []
 ## Perfil por defeito do primeiro jogador deste PC.
 var active := 0
@@ -225,7 +225,10 @@ func _check_meta(index: int) -> void:
 
 
 func unlocked_count(index: int) -> int:
-	return profiles[index]["unlocked"].size() if index >= 0 and index < profiles.size() else 0
+	if index < 0 or index >= profiles.size():
+		return 0
+	# Só contam as que ainda existem (a lista foi encurtada na 0.5.3).
+	return AchievementList.all().filter(func(a): return profiles[index]["unlocked"].has(a["id"])).size()
 
 
 func is_unlocked(index: int, id: String) -> bool:
@@ -249,7 +252,8 @@ func _load() -> void:
 	for i in count:
 		var section := "p%d" % i
 		profiles.append({"name": cfg.get_value(section, "name", "Chef"),
-			"stats": cfg.get_value(section, "stats", {}), "unlocked": cfg.get_value(section, "unlocked", {})})
+			"stats": cfg.get_value(section, "stats", {}), "unlocked": cfg.get_value(section, "unlocked", {}),
+			"online": cfg.get_value(section, "online", {})})
 	active = clampi(cfg.get_value("meta", "active", 0), 0, maxi(profiles.size() - 1, 0))
 
 
@@ -262,6 +266,7 @@ func save() -> void:
 		cfg.set_value(section, "name", profiles[i]["name"])
 		cfg.set_value(section, "stats", profiles[i]["stats"])
 		cfg.set_value(section, "unlocked", profiles[i]["unlocked"])
+		cfg.set_value(section, "online", profiles[i].get("online", {}))
 	cfg.save(SAVE_PATH)
 	_dirty = false
 	_save_time = 0.0

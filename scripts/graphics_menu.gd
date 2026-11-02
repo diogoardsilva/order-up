@@ -28,6 +28,8 @@ func _ready() -> void:
 	_add_row(inner, "preset")
 	for id in Gfx.OPTIONS:
 		_add_row(inner, id)
+	_add_row(inner, "aspect")
+	_add_row(inner, "resolution")
 	_add_row(inner, "vsync")
 	_add_row(inner, "fps_limit")
 	_add_row(inner, "show_fps")
@@ -46,8 +48,8 @@ func focus_first() -> void:
 
 func _add_row(parent: Control, id: String) -> void:
 	var b := UiStyle.button("", func(): _change(id, 1), ROW_WIDTH)
-	b.custom_minimum_size.y = 40
-	b.add_theme_font_size_override("font_size", 24)
+	b.custom_minimum_size.y = 34
+	b.add_theme_font_size_override("font_size", 22)
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.gui_input.connect(func(event: InputEvent):
 		if event.is_action_pressed("ui_left"):
@@ -67,6 +69,12 @@ func _change(id: String, dir: int) -> void:
 	match id:
 		"preset":
 			Gfx.cycle_preset(dir)
+		"aspect":
+			Screen.cycle_aspect(dir)
+			_refresh()
+		"resolution":
+			Screen.cycle_resolution(dir)
+			_refresh()
 		"vsync":
 			Gfx.set_vsync(not Gfx.vsync)
 		"fps_limit":
@@ -85,6 +93,12 @@ func _refresh() -> void:
 			"preset":
 				name = "Qualidade"
 				value = Gfx.preset_name()
+			"aspect":
+				name = "Ecrã"
+				value = Screen.aspect_name()
+			"resolution":
+				name = "Janela"
+				value = Screen.resolution_name() if not GameState.fullscreen else "Ecrã inteiro"
 			"vsync":
 				name = "VSync"
 				value = "Ligado" if Gfx.vsync else "Desligado"
