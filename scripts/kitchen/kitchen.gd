@@ -166,7 +166,7 @@ func _make_layers() -> void:
 		_ambient.draw_rect(Rect2(Vector2(k.end.x, all.position.y), Vector2(all.end.x - k.end.x, all.size.y)), c)
 		_ambient.draw_rect(Rect2(Vector2(k.position.x, all.position.y), Vector2(k.size.x, k.position.y - all.position.y)), c)
 		_ambient.draw_rect(Rect2(Vector2(k.position.x, k.end.y), Vector2(k.size.x, all.end.y - k.end.y)), c)
-		_ambient.draw_rect(k, c.lerp(Color(1, 1, 1), 0.85)))
+		_ambient.draw_rect(k, c.lerp(Color(1, 1, 1), 0.6)))
 	add_child(_ambient)
 	_lights = Node2D.new()
 	_lights.z_index = 50
@@ -235,7 +235,7 @@ func _collect_lights() -> void:
 		for fx in [0.22, 0.5, 0.78]:
 			for fy in [0.2, 0.5, 0.8]:
 				var at := Vector2(TILE + w * fx, h * fy)
-				_light_list.append({"pos": at, "radius": 96.0, "color": Color(white, (0.12 + 0.08 * night) if rich else 0.1), "cast": rich and fx == 0.5 and fy != 0.5})
+				_light_list.append({"pos": at, "radius": 80.0, "color": Color(white, (0.035 + 0.035 * night) if rich else 0.06), "cast": rich and fx == 0.5 and fy != 0.5})
 	for station: Station in stations.values():
 		if station is StoveStation and (station as StoveStation).state in [StoveStation.State.COOKING, StoveStation.State.READY]:
 			_light_list.append({"pos": cell_center(station.cell), "radius": 22.0 if not rich else 34.0, "color": Color(1.0, 0.45, 0.15, (0.22 if not rich else 0.32) * flicker), "cast": rich})
