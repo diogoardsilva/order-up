@@ -153,10 +153,12 @@ func _physics_process(delta: float) -> void:
 	if _net_frame % NET_SEND_EVERY != 0:
 		return
 	if Net.is_host():
-		var snapshot := _snapshot()
+		# Comprimido: com 8 ajudantes o estado passava do tamanho de um pacote.
+		var raw := var_to_bytes(_snapshot())
+		var packed := raw.compress(FileAccess.COMPRESSION_ZSTD)
 		_ready_peers = _ready_peers.filter(func(p): return multiplayer.get_peers().has(p))
 		for peer in _ready_peers:
-			_rpc_snapshot.rpc_id(peer, snapshot)
+			_rpc_snapshot_packed.rpc_id(peer, raw.size(), packed)
 	else:
 		# Até chegar o primeiro estado, avisa o anfitrião de que está pronto (o
 		# primeiro aviso pode chegar antes de o nível dele existir).
@@ -1146,6 +1148,14 @@ func _rpc_fx(at: Vector2, text: String, color: Color, sparkle: bool) -> void:
 
 
 @rpc("authority", "call_remote", "unreliable_ordered")
+func _rpc_snapshot_packed(size: int, packed: PackedByteArray) -> void:
+	if size <= 0 or size > 1 << 20:
+		return
+	var data = bytes_to_var(packed.decompress(size, FileAccess.COMPRESSION_ZSTD))
+	if data is Array:
+		_rpc_snapshot(data)
+
+
 func _rpc_snapshot(data: Array) -> void:
 	_got_snapshot = true
 	for c in data[0]:
