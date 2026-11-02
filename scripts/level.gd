@@ -121,6 +121,7 @@ func _ready() -> void:
 	_hud.draw.connect(_draw_hud)
 	layer.add_child(_hud)
 
+	_start_profiles()
 	var pause_layer := CanvasLayer.new()
 	pause_layer.layer = 10
 	add_child(pause_layer)
@@ -238,10 +239,86 @@ func _process(delta: float) -> void:
 
 func _exit_tree() -> void:
 	Sfx.set_murmur(0.0)
+	if not _finished:
+		Profiles.add("seconds", roundi(_played_time()))
+		_seconds_to_minutes()
+	Profiles.end_round()
+
+
+## Perfis dos jogadores deste PC (os convidados não contam).
+func _local_profiles() -> Array:
+	var result := []
+	for p in PlayerRegistry.players:
+		if p["peer"] == Net.my_id() or not Net.online:
+			result.append([Profiles.for_source(p["source_id"]), p.get("role", 0)])
+	return result
+
+
+func _start_profiles() -> void:
+	Profiles.start_round(_local_profiles().map(func(e): return e[0]))
+
+
+func _played_time() -> float:
+	return _open_time if _endless else _round_time - _time_left
+
+
+## Os minutos jogados contam aos segundos (para não se perderem rondas curtas).
+func _seconds_to_minutes() -> void:
+	for i in Profiles.playing:
+		var st: Dictionary = Profiles.profiles[i]["stats"]
+		var secs := int(st.get("seconds", 0))
+		var mins := secs / 60
+		if mins > int(st.get("minutes", 0)):
+			Profiles.add_to(i, "minutes", mins - int(st.get("minutes", 0)))
+
+
+## Fim da ronda: estrelas, rondas, papéis, modos... para as conquistas.
+func _record_round() -> void:
+	var lid: String = _level["id"]
+	Profiles.add("seconds", roundi(_played_time()))
+	_seconds_to_minutes()
+	if _tutorial:
+		Profiles.add("tutorial")
+		return
+	var stars := _stars()
+	var score := _orders.score
+	Profiles.add("rounds")
+	Profiles.add("lv_%s_rounds" % lid)
+	Profiles.best("round_best", score)
+	if score == 0:
+		Profiles.add("zero_round")
+	if _endless:
+		Profiles.best("lv_%s_endless_best" % lid, score)
+		Profiles.best("endless_minutes_best", floori(_open_time / 60.0))
+	else:
+		Profiles.add("diff_%d" % GameState.difficulty)
+		Profiles.best("lv_%s_stars_best" % lid, stars)
+		if stars >= 3:
+			Profiles.add("stars3")
+			if GameState.difficulty == 2:
+				Profiles.add("lv_%s_hard3" % lid)
+		if _orders.failed_count == 0 and _orders.paid_count > 0:
+			Profiles.add("perfect")
+			Profiles.add("lv_%s_perfect" % lid)
+	Profiles.best("players_best", PlayerRegistry.players.size())
+	var helpers := 0
+	for h in GameState.helpers:
+		if GameState.HELPER_PRESETS[h][1] >= 0:
+			helpers += 1
+	Profiles.best("helpers_best", helpers)
+	if Net.online:
+		Profiles.add("online_rounds")
+		if Net.is_host():
+			Profiles.add("hosted")
+	for e in _local_profiles():
+		if e[0] >= 0 and e[1] > 0:
+			Profiles.add_to(e[0], "role_%d" % e[1], 1)
 
 
 func _finish() -> void:
 	_finished = true
+	_record_round()
+	Profiles.end_round()
 	if _endless:
 		_new_record = GameState.save_endless(_level["id"], _orders.score)
 	elif not _tutorial:

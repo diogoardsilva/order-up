@@ -38,6 +38,7 @@ var level: Dictionary
 var _alias := {}
 ## Ingredientes atirados no ar: {"item", "pos", "vel", "dist", "slot"}.
 var thrown: Array[Dictionary] = []
+var _stat_seen := {}
 var _lights: Node2D
 var _light_tex: Texture2D
 ## Camadas dos gráficos (ver Gfx): chão (por baixo de tudo), luz ambiente
@@ -550,6 +551,8 @@ func throw_item(chef: Chef) -> void:
 	thrown.append({"item": chef.held, "pos": chef.position + dir * 8.0, "vel": dir * THROW_SPEED, "dist": 0.0, "slot": chef.slot})
 	chef.held = null
 	_sfx("throw", -2.0, 0.15)
+	if not quiet and chef.is_local and not chef.source is BotSource:
+		Profiles.add("thrown")
 
 
 func _update_thrown(delta: float) -> void:
@@ -563,6 +566,8 @@ func _update_thrown(delta: float) -> void:
 			if chef.slot != t["slot"] and chef.held == null and not chef.frozen and chef.position.distance_to(pos) < 12.0:
 				chef.held = t["item"]
 				_sfx("catch", -2.0)
+				if not quiet:
+					Profiles.add("caught")
 				particles.ring(pos, 10.0, Color(chef.color, 0.9))
 				thrown.erase(t)
 				break
@@ -777,17 +782,30 @@ func _customer_event(customer: Customer, before: int) -> void:
 			_sfx("bell", -3.0)
 		Customer.State.WAITING:
 			particles.ring(head, 14.0, Color("f2c94c"))
+			if not quiet and before == Customer.State.CALLING:
+				Profiles.add("orders")
 		Customer.State.EATING:
 			_sfx("served", -3.0, 0.02)
 			_sfx("happy", -8.0, 0.15)
 			particles.hearts(head, 3 + customer.size())
+			if not quiet:
+				Profiles.add("served", customer.recipes.size())
+				Profiles.add("drinks", customer.drinks.size())
+				Profiles.add("tips", customer.tip)
+				for r in customer.recipes + customer.drinks:
+					Profiles.add("dish_" + r["id"])
 			particles.ring(cell_center(customer.table.cell), 18.0, Color(1, 0.8, 0.9, 0.9), 0.5)
 		Customer.State.LEAVING:
 			if customer.angry:
+				if not quiet:
+					Profiles.add("failed")
 				_sfx("angry", -2.0, 0.1)
 				var at := customer.members[0].pos + Vector2(0, -22) if before == Customer.State.AT_REGISTER else head
 				particles.storm(at)
 			elif before == Customer.State.AT_REGISTER:
+				if not quiet:
+					Profiles.add("paid")
+					Profiles.add("points", customer.points())
 				_sfx("kaching", -2.0, 0.03)
 				particles.coins(register_center() + Vector2(0, -8), 7)
 				particles.ring(register_center(), 16.0, Color("f6c444"))
@@ -817,6 +835,8 @@ func _watch_station(station: Station) -> void:
 	var seen: Array = _station_seen[station.cell]
 	if seen[0] == key:
 		return
+	if not quiet:
+		_station_stats(station)
 	var before_state: int = seen[2]
 	var state := _cook_state(station)
 	var appeared: bool = String(seen[0]).is_empty() and station.item != null
@@ -839,6 +859,31 @@ func _watch_station(station: Station) -> void:
 			particles.splash(center + Vector2(0, -3), Color("f2b07a"))
 	elif station is SinkStation and (station as SinkStation).dirty > 0:
 		particles.splash(center, Color("bfe3f2"))
+
+
+## Estatísticas dos perfis: cortes, cozinhados, queimados e pratos lavados.
+func _station_stats(station: Station) -> void:
+	var now := 0
+	if station is BoardStation:
+		now = 1 if station.item != null and station.item.chopped else 0
+	elif station is StoveStation:
+		now = (station as StoveStation).state
+	elif station is SinkStation:
+		now = (station as SinkStation).dirty
+	else:
+		return
+	var was: int = _stat_seen.get(station.cell, now)
+	_stat_seen[station.cell] = now
+	if was == now:
+		return
+	if station is BoardStation and now == 1:
+		Profiles.add("chopped")
+	elif station is StoveStation and now == StoveStation.State.READY:
+		Profiles.add("cooked")
+	elif station is StoveStation and now == StoveStation.State.BURNT:
+		Profiles.add("burnt")
+	elif station is SinkStation and now < was:
+		Profiles.add("washed", was - now)
 
 
 func _cook_state(station: Station) -> int:

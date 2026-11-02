@@ -21,6 +21,7 @@ PlayerRegistry="*res://scripts/autoload/player_registry.gd"
 Net="*res://scripts/autoload/net.gd"
 Sfx="*res://scripts/autoload/sfx.gd"
 Transition="*res://scripts/autoload/transition.gd"
+Profiles="*res://scripts/autoload/profiles.gd"
 
 [display]
 

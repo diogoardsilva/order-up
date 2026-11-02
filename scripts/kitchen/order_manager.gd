@@ -124,6 +124,8 @@ func _fail(customer: Customer) -> void:
 	score = maxi(score - FAIL_PENALTY + part, 0)
 	if part > 0:
 		partial_paid += part
+		if not kitchen.quiet:
+			Profiles.add("partial")
 		paid.emit(part, at + Vector2(0, -12))
 	failed_count += 1
 	failed.emit(at)

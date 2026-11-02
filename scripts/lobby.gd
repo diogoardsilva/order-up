@@ -39,7 +39,7 @@ func _ready() -> void:
 		_slots.append(slot)
 
 	# Legendas com os botões desenhados como no comando (ou teclado).
-	var help := PromptBar.new([[&"pick", "Entrar"], [&"move", "Chef (⇆) e papel (⇅)"], [&"dash", "Sair"], [&"pause", "Começar"]])
+	var help := PromptBar.new([[&"pick", "Entrar"], [&"move", "Chef (⇆) e papel (⇅)"], [&"throw", "Perfil"], [&"dash", "Sair"], [&"pause", "Começar"]])
 	help.custom_minimum_size = Vector2(1280, 44)
 	root.add_child(help)
 	var help2 := UiStyle.label("Sem ninguém no lobby, Começar volta ao menu.", 18, UiStyle.MUTED, 4)
@@ -55,6 +55,7 @@ func _ready() -> void:
 		_last_x[source] = source.move.x
 		_last_y[source] = source.move.y
 	PlayerRegistry.players_changed.connect(_refresh)
+	Net.upnp_changed.connect(func(): _room_label.text = _room_text())
 	DeviceManager.sources_changed.connect(_refresh)
 	_refresh()
 	Sfx.music_on()
@@ -80,6 +81,9 @@ func _process(_delta: float) -> void:
 				var p := PlayerRegistry.get_player(slot.index)
 				if p and p["source"] == source:
 					slot.bump(dir)
+			Sfx.play("ui_move")
+		if joined and source.just_pressed(&"throw"):
+			PlayerRegistry.cycle_profile(source, 1)
 			Sfx.play("ui_move")
 		if not joined and source.just_pressed(&"pick"):
 			PlayerRegistry.join(source)
@@ -110,7 +114,14 @@ func _room_text() -> String:
 	if not Net.online:
 		return ""
 	if Net.is_host():
-		return "És o host. IP para os amigos: %s (porta %d)" % [" ou ".join(Net.local_addresses()), Net.PORT]
+		var lan := "Na mesma rede: %s" % " ou ".join(Net.local_addresses())
+		match Net.upnp_state:
+			"working":
+				return "A abrir a sala na internet (UPnP)...   %s" % lan
+			"ok":
+				if Net.public_ip != "":
+					return "Código da sala: %s   ·   %s" % [Net.encode_room(Net.public_ip), lan]
+		return "O router não abriu a porta (UPnP). Abre a porta UDP %d à mão ou usa o Tailscale.   %s" % [Net.PORT, lan]
 	return "Ligado à sala. Só o host pode começar."
 
 

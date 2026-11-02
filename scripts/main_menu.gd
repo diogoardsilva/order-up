@@ -19,6 +19,7 @@ var _main_box: VBoxContainer
 var _options_box: VBoxContainer
 var _graphics_box: GraphicsMenu
 var _controls_box: ControlsMenu
+var _profiles_box: ProfilesMenu
 var _column: VBoxContainer
 var _join_box: HBoxContainer
 var _ip_edit: LineEdit
@@ -67,7 +68,7 @@ func _ready() -> void:
 	_join_box = HBoxContainer.new()
 	_join_box.add_theme_constant_override("separation", 10)
 	_ip_edit = LineEdit.new()
-	_ip_edit.placeholder_text = "IP do host"
+	_ip_edit.placeholder_text = "Código da sala ou IP"
 	_ip_edit.text = GameState.last_ip
 	_ip_edit.custom_minimum_size = Vector2(220, 56)
 	_ip_edit.text_submitted.connect(func(_t): _join())
@@ -75,6 +76,7 @@ func _ready() -> void:
 	_join_box.add_child(UiStyle.button("Ligar", _join, 130))
 	_join_box.hide()
 	_main_box.add_child(_join_box)
+	_main_box.add_child(UiStyle.button("Perfis e conquistas", _show_profiles, 360))
 	_main_box.add_child(UiStyle.button("Opções", _show_options, 360))
 	_main_box.add_child(UiStyle.button("Sair", func(): get_tree().quit(), 360))
 	for b in _main_box.get_children():
@@ -97,6 +99,10 @@ func _ready() -> void:
 	_controls_box.hide()
 	_controls_box.closed.connect(_hide_controls)
 	add_child(_controls_box)
+	_profiles_box = ProfilesMenu.new()
+	_profiles_box.hide()
+	_profiles_box.closed.connect(_hide_profiles)
+	add_child(_profiles_box)
 
 	_status = UiStyle.label(GameState.menu_message, 22, UiStyle.GOLD, 6)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -193,6 +199,21 @@ func _show_graphics() -> void:
 	_graphics_box.show()
 	_graphics_box.focus_first()
 	_pop(_graphics_box)
+
+
+func _show_profiles() -> void:
+	_column.hide()
+	_sign.hide()
+	_profiles_box.show()
+	_profiles_box.focus_first()
+	_pop(_profiles_box)
+
+
+func _hide_profiles() -> void:
+	_profiles_box.hide()
+	_column.show()
+	_sign.show()
+	_first_button.grab_focus()
 
 
 func _show_controls() -> void:
@@ -374,10 +395,10 @@ func _show_join() -> void:
 func _join() -> void:
 	var ip := _ip_edit.text.strip_edges()
 	if ip.is_empty() or Net.join(ip) != OK:
-		_status.text = "Escreve um IP válido."
+		_status.text = "Escreve o código da sala (ex. K7Q-9XMF) ou um IP."
 		return
 	GameState.remember_ip(ip)
-	_status.text = "A ligar a %s..." % ip
+	_status.text = "A entrar na sala %s..." % ip
 	multiplayer.connected_to_server.connect(func():
 		GameState.mode = GameState.Mode.PLAY
 		Transition.go("res://scenes/lobby.tscn"), CONNECT_ONE_SHOT)

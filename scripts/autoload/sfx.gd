@@ -28,6 +28,7 @@ const SOUNDS := {
 	"happy": preload("res://assets/audio/happy.wav"),
 	"throw": preload("res://assets/audio/throw.wav"),
 	"catch": preload("res://assets/audio/catch.wav"),
+	"achievement": preload("res://assets/audio/achievement.wav"),
 	"splash": preload("res://assets/audio/splash.wav"),
 	"step_done": preload("res://assets/audio/step_done.wav"),
 	"count": preload("res://assets/audio/count.wav"),

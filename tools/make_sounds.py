@@ -232,6 +232,8 @@ def main():
     w = lowpass(w, 3) - lowpass(w, 30)
     save("throw", w * np.sin(np.linspace(0, np.pi, len(w))) ** 2, 0.3)
     save("catch", mix(osc(sweep(260, 140, 0.08), 0.08, "sine") * env(int(RATE * 0.08), curve=5), noise(0.03, 4) * env(int(RATE * 0.03), curve=10) * 0.4), 0.45)
+    save("achievement", mix(seq(*[bell(note_freq(n), 0.12) for n in (79, 83, 86)], bell(note_freq(91), 1.0)),
+        seq(*[blip(note_freq(n), 0.12, "triangle", 4) for n in (67, 71, 74)], blip(note_freq(79), 0.9, "triangle", 2)) * 0.5), 0.45)
     plop = osc(sweep(200, 900, 0.07), 0.07, "sine") * env(int(RATE * 0.07), curve=4)
     save("splash", mix(plop, lowpass(noise(0.2), 4) * env(int(RATE * 0.2), curve=5) * 0.5), 0.45)
     save("step_done", seq(*[blip(note_freq(n), 0.07, "triangle", 5) for n in (79, 84, 88)], blip(note_freq(91), 0.25, "triangle", 4)), 0.4)

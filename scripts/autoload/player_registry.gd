@@ -7,18 +7,44 @@ signal players_changed
 const MAX_PLAYERS := 4
 const COLORS: Array[Color] = [Color("e8574d"), Color("4d9be8"), Color("f2c94c"), Color("6fcf6a")]
 
-## Cada entrada: {"slot", "source", "color", "peer", "source_id", "label", "character"}
+## Cada entrada: {"slot", "source", "color", "peer", "source_id", "label", "character", "role", "name"}
+## ("name" é o nome do perfil escolhido nesse PC, ou "Convidado").
 var players: Array[Dictionary] = []
 
 
 func join(source: InputSource) -> void:
+	var name := Profiles.profile_name(Profiles.for_source(source.get_id()))
 	if Net.is_client():
-		_request_join.rpc_id(1, source.get_id(), source.get_label())
+		_request_join.rpc_id(1, source.get_id(), source.get_label(), name)
 	else:
-		_add(source, Net.my_id(), source.get_id(), source.get_label())
+		_add(source, Net.my_id(), source.get_id(), source.get_label(), name)
+
+
+## Troca o perfil de um jogador deste PC (dir = -1 ou +1).
+func cycle_profile(source: InputSource, dir: int) -> void:
+	var name := Profiles.profile_name(Profiles.cycle_source(source.get_id(), dir))
+	if Net.is_client():
+		_request_name.rpc_id(1, source.get_id(), name)
+	else:
+		_set_name(func(p): return p["source"] == source, name)
+
+
+func _set_name(filter: Callable, name: String) -> void:
+	for p in players:
+		if filter.call(p):
+			p["name"] = name.left(16)
+			_changed()
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_name(source_id: String, name: String) -> void:
+	if multiplayer.is_server() and not Net.in_game:
+		var peer := multiplayer.get_remote_sender_id()
+		_set_name(func(p): return p["peer"] == peer and p["source_id"] == source_id, name)
 
 
 func leave(source: InputSource) -> void:
+	Profiles.forget_source(source.get_id())
 	if Net.is_client():
 		_request_leave.rpc_id(1, source.get_id())
 	else:
@@ -79,6 +105,7 @@ func remove_peer(peer: int) -> void:
 
 func clear() -> void:
 	players.clear()
+	Profiles.by_source.clear()
 	players_changed.emit()
 
 
@@ -87,7 +114,7 @@ func send_to(peer: int) -> void:
 	_sync.rpc_id(peer, _export())
 
 
-func _add(source: InputSource, peer: int, source_id: String, label: String) -> void:
+func _add(source: InputSource, peer: int, source_id: String, label: String, name := "") -> void:
 	if players.size() >= MAX_PLAYERS or players.any(func(p): return p["peer"] == peer and p["source_id"] == source_id):
 		return
 	var slot := 0
@@ -98,7 +125,8 @@ func _add(source: InputSource, peer: int, source_id: String, label: String) -> v
 	while players.any(func(p): return p["character"] == character):
 		character = (character + 1) % Art.CHEFS.size()
 	players.append({"slot": slot, "source": source, "color": COLORS[slot],
-		"peer": peer, "source_id": source_id, "label": label, "character": character, "role": 0})
+		"peer": peer, "source_id": source_id, "label": label, "character": character, "role": 0,
+		"name": name.left(16) if name != "" else "Jogador %d" % (slot + 1)})
 	players.sort_custom(func(a, b): return a["slot"] < b["slot"])
 	_changed()
 
@@ -117,13 +145,13 @@ func _changed() -> void:
 
 
 func _export() -> Array:
-	return players.map(func(p): return [p["slot"], p["peer"], p["source_id"], p["label"], p["character"], p.get("role", 0)])
+	return players.map(func(p): return [p["slot"], p["peer"], p["source_id"], p["label"], p["character"], p.get("role", 0), p.get("name", "")])
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _request_join(source_id: String, label: String) -> void:
+func _request_join(source_id: String, label: String, name: String) -> void:
 	if multiplayer.is_server() and not Net.in_game:
-		_add(RemoteSource.new(label), multiplayer.get_remote_sender_id(), source_id, label)
+		_add(RemoteSource.new(label), multiplayer.get_remote_sender_id(), source_id, label, name)
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -148,5 +176,5 @@ func _sync(list: Array) -> void:
 		if source == null:
 			source = RemoteSource.new(e[3])
 		players.append({"slot": e[0], "source": source, "color": COLORS[e[0]],
-			"peer": e[1], "source_id": e[2], "label": e[3], "character": e[4], "role": e[5] if e.size() > 5 else 0})
+			"peer": e[1], "source_id": e[2], "label": e[3], "character": e[4], "role": e[5] if e.size() > 5 else 0, "name": e[6] if e.size() > 6 else ""})
 	players_changed.emit()

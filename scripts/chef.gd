@@ -142,6 +142,8 @@ func _local_update(delta: float) -> void:
 		_dash_left = DASH_TIME
 		_dash_cooldown = DASH_COOLDOWN
 		Sfx.play("dash")
+		if not source is BotSource:
+			Profiles.add("dashes")
 		for i in 6:
 			kitchen.particles.dust(position + Vector2(randf_range(-5, 5), 6), -facing)
 
@@ -159,6 +161,8 @@ func _local_update(delta: float) -> void:
 		throw_requested.emit()
 	if source.just_pressed(&"emote"):
 		emote_left = EMOTE_TIME
+		if not source is BotSource:
+			Profiles.add("emotes")
 
 
 func _draw() -> void:

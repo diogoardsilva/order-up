@@ -46,7 +46,14 @@ func _draw() -> void:
 	var ribbon := Rect2(rect.position + Vector2(18, 16), Vector2(rect.size.x - 36, 40))
 	draw_rect(ribbon, color if joined else Color("9c7b52"))
 	draw_rect(Rect2(ribbon.position + Vector2(0, ribbon.size.y - 4), Vector2(ribbon.size.x, 4)), Color(0, 0, 0, 0.2))
-	draw_string(font, ribbon.position + Vector2(0, 30), "Jogador %d" % (index + 1), HORIZONTAL_ALIGNMENT_CENTER, ribbon.size.x, 26, UiStyle.TEXT)
+	# Nome do perfil (troca-se com o botão de atirar).
+	var title: String = _player.get("name", "") if joined else ""
+	if title.is_empty():
+		title = "Jogador %d" % (index + 1)
+	var tsize := 26
+	while tsize > 14 and font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, tsize).x > ribbon.size.x - 70:
+		tsize -= 1
+	draw_string(font, ribbon.position + Vector2(0, 30), title, HORIZONTAL_ALIGNMENT_CENTER, ribbon.size.x, tsize, UiStyle.TEXT)
 	# Online, os jogadores do PC que criou a sala levam a marca de host.
 	if joined and Net.online and _player.get("peer", 0) == 1:
 		var tag := Rect2(ribbon.end + Vector2(-58, -8), Vector2(58, 24))
