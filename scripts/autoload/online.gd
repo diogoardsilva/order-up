@@ -10,7 +10,7 @@ signal friends_changed
 signal status_changed
 
 const URL := "https://cbwkqshpblvvkxnohpfp.supabase.co"
-const ANON_KEY := ""
+const ANON_KEY := "sb_publishable_SDtVBrJ8R3Vl0bWHFFQ96w_4Dmndf5K"
 const HEARTBEAT_EVERY := 30.0
 
 var friends: Array = []
@@ -128,8 +128,10 @@ func _rpc(fn: String, body: Dictionary) -> Variant:
 	var http := HTTPRequest.new()
 	http.timeout = 10.0
 	add_child(http)
-	var headers := PackedStringArray(["apikey: " + ANON_KEY, "Authorization: Bearer " + ANON_KEY,
-		"Content-Type: application/json"])
+	var headers := PackedStringArray(["apikey: " + ANON_KEY, "Content-Type: application/json"])
+	# As chaves antigas (JWT) também vão no Authorization; as novas (sb_publishable_) não.
+	if not ANON_KEY.begins_with("sb_"):
+		headers.append("Authorization: Bearer " + ANON_KEY)
 	var err := http.request(URL + "/rest/v1/rpc/" + fn, headers, HTTPClient.METHOD_POST, JSON.stringify(body))
 	if err != OK:
 		http.queue_free()
