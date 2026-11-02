@@ -1,4 +1,4 @@
-name: Build Windows
+name: Build
 
 on:
   push:
@@ -10,8 +10,24 @@ env:
   GODOT_VERSION: "4.7"
 
 jobs:
-  windows:
+  export:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows
+            preset: "Windows Desktop"
+            file: OrderUp.exe
+            templates: "windows_*"
+          - platform: linux
+            preset: "Linux"
+            file: OrderUp.x86_64
+            templates: "linux_*"
+          - platform: macos
+            preset: "macOS"
+            file: OrderUp.zip
+            templates: "macos.zip"
     steps:
       - uses: actions/checkout@v4
 
@@ -20,7 +36,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/godot
-          key: godot-${{ env.GODOT_VERSION }}
+          key: godot-${{ env.GODOT_VERSION }}-${{ matrix.platform }}
 
       - name: Download Godot and export templates
         if: steps.cache.outputs.cache-hit != 'true'
@@ -31,8 +47,8 @@ jobs:
           unzip -q godot.zip && rm godot.zip
           curl -sSLo templates.tpz "$base/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
           unzip -q templates.tpz && rm templates.tpz
-          # Só precisamos dos templates de Windows.
-          find templates -type f ! -name 'windows_*' ! -name version.txt -delete
+          # Só ficam os templates desta plataforma.
+          find templates -type f ! -name '${{ matrix.templates }}' ! -name version.txt -delete
 
       - name: Install export templates
         run: |
@@ -43,11 +59,19 @@ jobs:
         run: |
           godot=~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
           $godot --headless --import
-          mkdir -p build/windows
-          $godot --headless --export-release "Windows Desktop" build/windows/OrderUp.exe
-          test -f build/windows/OrderUp.exe
+          mkdir -p build/${{ matrix.platform }}
+          $godot --headless --export-release "${{ matrix.preset }}" build/${{ matrix.platform }}/${{ matrix.file }}
+          test -f build/${{ matrix.platform }}/${{ matrix.file }}
+
+      - name: Linux launcher permissions
+        if: matrix.platform == 'linux'
+        # O upload-artifact perde a permissão de executar; vai dentro de um tar.
+        run: |
+          chmod +x build/linux/OrderUp.x86_64
+          tar -czf build/OrderUp-linux.tar.gz -C build/linux .
+          rm -rf build/linux/* && mv build/OrderUp-linux.tar.gz build/linux/
 
       - uses: actions/upload-artifact@v4
         with:
-          name: OrderUp-windows
-          path: build/windows/
+          name: OrderUp-${{ matrix.platform }}
+          path: build/${{ matrix.platform }}/
