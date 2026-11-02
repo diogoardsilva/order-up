@@ -3,6 +3,7 @@ name: Build
 on:
   push:
     branches: [main]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -75,3 +76,33 @@ jobs:
         with:
           name: OrderUp-${{ matrix.platform }}
           path: build/${{ matrix.platform }}/
+
+  # Ao fazer push de uma tag vX.Y.Z, publica os 3 builds numa Release pública
+  # (download direto, sem precisar de conta no GitHub).
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: export
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: Package
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          mkdir out
+          (cd dist/OrderUp-windows && zip -qr ../../out/OrderUp-$v-windows.zip .)
+          cp dist/OrderUp-linux/OrderUp-linux.tar.gz out/OrderUp-$v-linux.tar.gz
+          cp dist/OrderUp-macos/OrderUp.zip out/OrderUp-$v-macos.zip
+          cp "$(ls supabase/migrations/*.sql | sort | tail -n1)" out/supabase-setup.sql
+          ls -la out
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" \
+            --title "Order Up! $GITHUB_REF_NAME" \
+            --notes "Windows: OrderUp-*-windows.zip · Linux: OrderUp-*-linux.tar.gz · macOS: OrderUp-*-macos.zip · supabase-setup.sql: correr uma vez no SQL Editor do Supabase."
