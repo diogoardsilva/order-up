@@ -23,6 +23,8 @@ var _profiles_box: ProfilesMenu
 var _column: VBoxContainer
 var _join_box: HBoxContainer
 var _ip_edit: LineEdit
+var _update_button: Button
+var _update_label: Label
 var _status: Label
 var _first_button: Button
 var _fullscreen_button: Button
@@ -78,6 +80,10 @@ func _ready() -> void:
 	_main_box.add_child(_join_box)
 	_main_box.add_child(UiStyle.button("Perfis e conquistas", _show_profiles, 360))
 	_main_box.add_child(UiStyle.button("Opções", _show_options, 360))
+	# Aparece quando uma atualização já está descarregada.
+	_update_button = UiStyle.button("Reiniciar e atualizar", func(): Updater.restart_now(), 360)
+	_update_button.hide()
+	_main_box.add_child(_update_button)
 	_main_box.add_child(UiStyle.button("Sair", func(): get_tree().quit(), 360))
 	for b in _main_box.get_children():
 		if b is Button:
@@ -116,6 +122,12 @@ func _ready() -> void:
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	info.position = Vector2(16, 690)
 	add_child(info)
+	_update_label = UiStyle.label("", 18, UiStyle.GOLD, 4)
+	_update_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_update_label.position = Vector2(16, 664)
+	add_child(_update_label)
+	Updater.changed.connect(_refresh_update)
+	_refresh_update()
 
 	# A legenda mostra o botão de "dash" para voltar (Shift no teclado).
 	var shift := InputEventKey.new()
@@ -402,3 +414,10 @@ func _join() -> void:
 	multiplayer.connected_to_server.connect(func():
 		GameState.mode = GameState.Mode.PLAY
 		Transition.go("res://scenes/lobby.tscn"), CONNECT_ONE_SHOT)
+
+
+func _refresh_update() -> void:
+	_update_label.text = Updater.status_text()
+	_update_button.visible = Updater.state == "ready"
+	if Updater.state == "ready":
+		_update_button.text = "Atualizar para a %s" % Updater.new_version

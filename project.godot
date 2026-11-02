@@ -13,6 +13,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+Updater="*res://scripts/autoload/updater.gd"
 GameState="*res://scripts/autoload/game_state.gd"
 Screen="*res://scripts/autoload/screen.gd"
 Gfx="*res://scripts/autoload/gfx.gd"

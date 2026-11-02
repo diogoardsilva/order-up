@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: [main]
+    branches: [main, claude/project-thread-1g23o0]
   pull_request:
   workflow_dispatch:
 
@@ -58,10 +58,17 @@ jobs:
       - name: Export
         run: |
           godot=~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
+          # Número da build: o jogo usa-o para saber se há atualização.
+          sed -i "/^config\/version=/a config/build=${{ github.run_number }}" project.godot
+          # Cópia das definições que vai dentro do pacote (o atualizador aplica-as).
+          cp project.godot update_settings.cfg
           $godot --headless --import
-          mkdir -p build/${{ matrix.platform }}
+          mkdir -p build/${{ matrix.platform }} pck
           $godot --headless --export-release "${{ matrix.preset }}" build/${{ matrix.platform }}/${{ matrix.file }}
           test -f build/${{ matrix.platform }}/${{ matrix.file }}
+          # Só o pacote do jogo (sem o executável), para as atualizações automáticas.
+          $godot --headless --export-pack "${{ matrix.preset }}" pck/OrderUp-${{ matrix.platform }}.pck
+          test -f pck/OrderUp-${{ matrix.platform }}.pck
 
       - name: Linux launcher permissions
         if: matrix.platform == 'linux'
@@ -75,3 +82,47 @@ jobs:
         with:
           name: OrderUp-${{ matrix.platform }}
           path: build/${{ matrix.platform }}/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pck-${{ matrix.platform }}
+          path: pck/
+
+  # Publica no release "latest" (público, sem login): os jogos instalados
+  # descarregam o pacote novo sozinhos; os zips servem para instalar de raiz.
+  release:
+    needs: export
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dl
+      - name: Prepare files
+        run: |
+          mkdir -p out
+          cp dl/pck-*/OrderUp-*.pck out/
+          (cd dl/OrderUp-windows && zip -qr ../../out/OrderUp-windows.zip .)
+          cp dl/OrderUp-linux/OrderUp-linux.tar.gz out/OrderUp-linux.tar.gz
+          cp dl/OrderUp-macos/OrderUp.zip out/OrderUp-macos.zip
+          version=$(grep '^config/version=' project.godot | cut -d'"' -f2)
+          sha() { sha256sum "out/$1" | cut -d' ' -f1; }
+          cat > out/version.json <<JSON
+          {"version": "$version", "build": ${{ github.run_number }}, "godot": "${GODOT_VERSION}",
+           "files": {"windows": "OrderUp-windows.pck", "linux": "OrderUp-linux.pck", "macos": "OrderUp-macos.pck"},
+           "sha256": {"windows": "$(sha OrderUp-windows.pck)", "linux": "$(sha OrderUp-linux.pck)", "macos": "$(sha OrderUp-macos.pck)"}}
+          JSON
+          cat out/version.json
+          ls -la out
+      - name: Publish release "latest"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(grep '^config/version=' project.godot | cut -d'"' -f2)
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest out/* --target "${{ github.sha }}" --prerelease \
+            --title "Order Up! $version (build ${{ github.run_number }})" \
+            --notes "Versão $version, build ${{ github.run_number }}. Windows: OrderUp-windows.zip · Linux: OrderUp-linux.tar.gz · macOS: OrderUp-macos.zip. Os jogos já instalados atualizam-se sozinhos."

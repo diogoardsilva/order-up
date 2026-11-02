@@ -9,3 +9,4 @@ build/
 # SO
 .DS_Store
 Thumbs.db
+update_settings.cfg

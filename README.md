@@ -123,3 +123,8 @@ scripts/           lógica das cenas e do chef
 ```
 
 O chef só lê de um `InputSource`, nunca diretamente do teclado ou do comando. Assim, no marco do online, os jogadores remotos entram como mais uma fonte de input.
+
+## Atualizações automáticas
+
+Cada push para `main` (ou para o ramo de testes) faz o GitHub Actions publicar o release **latest** do repositório, que é público e não pede login: os jogos completos (`OrderUp-windows.zip`, `OrderUp-linux.tar.gz`, `OrderUp-macos.zip`), o pacote do jogo de cada sistema (`OrderUp-<sistema>.pck`, poucos MB) e um `version.json` com a build e o sha256. O jogo (`scripts/autoload/updater.gd`) procura atualizações ao abrir e de 30 em 30 minutos, descarrega o pacote em segundo plano e mostra "Atualizar para a X" no menu. Da próxima vez que abre, carrega o pacote novo antes de tudo (também as definições novas). Se um pacote novo não arrancar bem, o jogo volta à versão do executável. Uma versão nova do Godot obriga a instalar o jogo completo outra vez.
+
