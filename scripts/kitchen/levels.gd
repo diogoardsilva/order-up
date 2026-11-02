@@ -7,20 +7,21 @@ class_name Levels
 ## Legenda: . chão, C bancada (parede no salão), a-e caixas de ingredientes
 ## (pela ordem de "crates"), B tábua de cortar, S fogão, P pratos limpos,
 ## W lava-loiça, X lixo, M mesa para 2, N/n mesa para 4 (metade de cima/baixo),
-## R caixa registadora, E porta de entrada dos clientes, 1-4 início dos chefs.
+## R caixa registadora, H passe (balcão com campainha entre a cozinha e o salão,
+## onde se deixam os pratos prontos), E porta de entrada dos clientes, 1-4 início dos chefs.
 const LAYOUT: Array[String] = [
 	"CCBBCSSCCCCCCCCCCCCC",
-	"C..........C.......C",
-	"C..1.......C.M..N..C",
-	"C......3...C....n..C",
+	"C..........H.......C",
+	"C..1.......H.M..N..C",
+	"C......3...H....n..C",
 	"P..........C.M.....C",
 	"W..................C",
 	"X.CabcdeC.......R..C",
 	"W..........C.......C",
 	"P..........C.M.....C",
-	"C......4...C....N..C",
-	"C..2.......C.M..n..C",
-	"C..........C.......E",
+	"C......4...H....N..C",
+	"C..2.......H.M..n..C",
+	"C..........H.......E",
 	"CCBBCSSCCCCCCCCCCCCC",
 ]
 
@@ -44,6 +45,58 @@ const INGREDIENT_NAMES := {
 	"cucumber": "Pepino", "bun": "Pão", "patty": "Carne", "cheese": "Queijo", "pasta": "Esparguete",
 	"dough": "Massa",
 }
+
+
+## Nome do que sai do fogão.
+const PRODUCT_NAMES := {
+	"soup": "Sopa", "caldo": "Caldo verde", "steak_cooked": "Bife grelhado", "egg_fried": "Ovo estrelado",
+	"fries": "Batata frita", "bras": "Bacalhau à Brás", "rice_cooked": "Arroz cozido", "patty_cooked": "Carne grelhada",
+	"pizza": "Pizza", "pasta_cooked": "Esparguete cozido",
+}
+## Nome de um ingrediente no singular (para o que se leva na mão).
+const SINGULAR := {"egg": "Ovo", "potato": "Batata"}
+
+
+## Nome de um conteúdo, ex. "potato_chopped" -> "Batata cortada".
+static func content_name(id: String) -> String:
+	if PRODUCT_NAMES.has(id):
+		return PRODUCT_NAMES[id]
+	var raw := id.trim_suffix("_chopped")
+	var name: String = SINGULAR.get(raw, INGREDIENT_NAMES.get(raw, raw))
+	if id.ends_with("_chopped"):
+		# Concorda com o género: "Batata cortada", "Bacalhau cortado".
+		name += " cortada" if name.ends_with("a") or name == "Couve" or name == "Alface" else " cortado"
+	return name
+
+
+## Nome do que um chef leva: ingrediente, prato (o nome do prato se estiver
+## completo) ou panela com o que tem dentro.
+static func item_name(item: Item) -> String:
+	if item == null:
+		return ""
+	if item.is_ingredient():
+		return content_name(item.content_id())
+	if item.is_plate():
+		if item.dirty:
+			return "Pratos sujos" if item.stack > 1 else "Prato sujo"
+		if item.contents.is_empty():
+			return "%d pratos" % item.stack if item.stack > 1 else "Prato vazio"
+		var dish := Recipes.match_plate(item.contents)
+		var text: String = dish["name"] if not dish.is_empty() else " + ".join(item.contents.map(content_name))
+		if item.second:
+			text += " e " + item_name(item.second)
+		return text
+	if item.is_cookware():
+		var tool: String = {"pot": "Panela", "pan": "Frigideira", "oven": "Forno"}.get(item.tool, "Panela")
+		match item.cook_state:
+			Item.Cook.READY:
+				return "%s: %s pronto" % [tool, content_name(item.product)]
+			Item.Cook.BURNT:
+				return "%s: queimado!" % tool
+		if item.contents.is_empty():
+			return tool
+		return "%s: %s" % [tool, " + ".join(item.contents.map(content_name))]
+	return ""
 
 
 static func get_level(index: int) -> Dictionary:

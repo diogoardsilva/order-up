@@ -145,7 +145,7 @@ func _draw() -> void:
 	var breathe := 0.0 if moving else sin(Time.get_ticks_msec() / 400.0 + slot) * 0.03
 	var top_left := Vector2(-Art.CHEF_FRAME.x / 2.0, -Art.CHEF_FRAME.y + 8 + bob)
 
-	draw_circle(Vector2(0, 7), 6.0, Color(0, 0, 0, 0.25))
+	kitchen.draw_actor_shadow(self, Vector2(0, 7), position, 6.0)
 	# Esmaga e estica a partir dos pés.
 	var sq := sin(_squash * PI) * 0.18
 	draw_set_transform(Vector2(0, 8), 0.0, Vector2(1.0 + sq, 1.0 - sq + breathe))

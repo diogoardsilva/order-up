@@ -17,6 +17,8 @@ var _demo_timers := {}  # id do cliente -> segundos no estado atual
 var _sign: Control
 var _main_box: VBoxContainer
 var _options_box: VBoxContainer
+var _graphics_box: GraphicsMenu
+var _column: VBoxContainer
 var _join_box: HBoxContainer
 var _ip_edit: LineEdit
 var _status: Label
@@ -47,22 +49,24 @@ func _ready() -> void:
 	add_child(_sign)
 
 	var column := VBoxContainer.new()
-	column.position = Vector2(80, 248)
+	_column = column
+	column.position = Vector2(80, 236)
 	column.custom_minimum_size = Vector2(360, 0)
 	column.add_theme_constant_override("separation", 10)
 	add_child(column)
 
 	_main_box = VBoxContainer.new()
-	_main_box.add_theme_constant_override("separation", 10)
+	_main_box.add_theme_constant_override("separation", 8)
 	column.add_child(_main_box)
 	_first_button = UiStyle.button("Jogar", _start_local, 360)
 	_main_box.add_child(_first_button)
-	_main_box.add_child(UiStyle.button("Criar sala online", _host, 360))
-	_main_box.add_child(UiStyle.button("Entrar numa sala online", _show_join, 360))
+	_main_box.add_child(UiStyle.button("Tutorial", _start_tutorial, 360))
+	_main_box.add_child(UiStyle.button("Ser host (criar sala online)", _host, 360))
+	_main_box.add_child(UiStyle.button("Entrar na sala de um amigo", _show_join, 360))
 	_join_box = HBoxContainer.new()
 	_join_box.add_theme_constant_override("separation", 10)
 	_ip_edit = LineEdit.new()
-	_ip_edit.placeholder_text = "IP do anfitrião"
+	_ip_edit.placeholder_text = "IP do host"
 	_ip_edit.text = GameState.last_ip
 	_ip_edit.custom_minimum_size = Vector2(220, 56)
 	_ip_edit.text_submitted.connect(func(_t): _join())
@@ -72,10 +76,21 @@ func _ready() -> void:
 	_main_box.add_child(_join_box)
 	_main_box.add_child(UiStyle.button("Opções", _show_options, 360))
 	_main_box.add_child(UiStyle.button("Sair", func(): get_tree().quit(), 360))
+	for b in _main_box.get_children():
+		if b is Button:
+			b.custom_minimum_size.y = 54
 
 	_options_box = _build_options()
 	_options_box.hide()
 	column.add_child(_options_box)
+
+	# As opções de gráficos ocupam a esquerda toda; o restaurante por trás
+	# mostra logo o resultado.
+	_graphics_box = GraphicsMenu.new()
+	_graphics_box.position = Vector2(50, 12)
+	_graphics_box.hide()
+	_graphics_box.closed.connect(_hide_graphics)
+	add_child(_graphics_box)
 
 	_status = UiStyle.label(GameState.menu_message, 22, UiStyle.GOLD, 6)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -108,9 +123,11 @@ func _build_background() -> void:
 	_orders.kitchen = _kitchen
 	# Numa camada por baixo da interface.
 	var holder := CanvasLayer.new()
-	holder.layer = -1
+	holder.layer = -2
 	add_child(holder)
 	holder.add_child(_kitchen)
+	_kitchen.evening = 0.55
+	add_child(PostFX.new(-1))
 	for i in 3:
 		_orders.spawn_group(_orders._random_order())
 
@@ -129,6 +146,7 @@ func _build_options() -> VBoxContainer:
 		GameState.set_fullscreen(not GameState.fullscreen)
 		_refresh_options(), 310)
 	inner.add_child(_fullscreen_button)
+	inner.add_child(UiStyle.button("Gráficos...", _show_graphics, 310))
 	inner.add_child(_volume_row("Música", GameState.music_volume, func(v): GameState.set_volumes(v, GameState.sfx_volume)))
 	inner.add_child(_volume_row("Efeitos", GameState.sfx_volume, func(v):
 		GameState.set_volumes(GameState.music_volume, v)
@@ -203,6 +221,21 @@ func _show_options() -> void:
 	_pop(_options_box)
 
 
+func _show_graphics() -> void:
+	_column.hide()
+	_sign.hide()
+	_graphics_box.show()
+	_graphics_box.focus_first()
+	_pop(_graphics_box)
+
+
+func _hide_graphics() -> void:
+	_graphics_box.hide()
+	_column.show()
+	_sign.show()
+	_fullscreen_button.grab_focus()
+
+
 func _hide_options() -> void:
 	_options_box.hide()
 	_main_box.show()
@@ -211,7 +244,10 @@ func _hide_options() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_cancel") and _options_box.visible:
+	if event.is_action_pressed("ui_cancel") and _graphics_box.visible:
+		Sfx.play("ui_back")
+		_hide_graphics()
+	elif event.is_action_pressed("ui_cancel") and _options_box.visible:
 		Sfx.play("ui_back")
 		_hide_options()
 
@@ -323,6 +359,13 @@ func _draw_sign() -> void:
 	_sign.draw_rect(Rect2(band.position + Vector2(0, 30), Vector2(rw, 4)), dark)
 	_sign.draw_rect(band, ink, false, 3.0)
 	_sign.draw_string(font, Vector2(rx, ry + 26), "um restaurante a quatro mãos", HORIZONTAL_ALIGNMENT_CENTER, rw, 26, UiStyle.PAPER)
+
+
+## O tutorial pode repetir-se sempre que se quiser.
+func _start_tutorial() -> void:
+	Net.leave()
+	GameState.mode = GameState.Mode.TUTORIAL
+	Transition.go("res://scenes/lobby.tscn")
 
 
 ## Na primeira vez que se joga, o jogo começa pelo tutorial.

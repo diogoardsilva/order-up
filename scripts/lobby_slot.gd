@@ -47,6 +47,12 @@ func _draw() -> void:
 	draw_rect(ribbon, color if joined else Color("9c7b52"))
 	draw_rect(Rect2(ribbon.position + Vector2(0, ribbon.size.y - 4), Vector2(ribbon.size.x, 4)), Color(0, 0, 0, 0.2))
 	draw_string(font, ribbon.position + Vector2(0, 30), "Jogador %d" % (index + 1), HORIZONTAL_ALIGNMENT_CENTER, ribbon.size.x, 26, UiStyle.TEXT)
+	# Online, os jogadores do PC que criou a sala levam a marca de host.
+	if joined and Net.online and _player.get("peer", 0) == 1:
+		var tag := Rect2(ribbon.end + Vector2(-58, -8), Vector2(58, 24))
+		draw_rect(tag.grow(2), UiStyle.INK)
+		draw_rect(tag, UiStyle.GOLD)
+		draw_string(font, tag.position + Vector2(0, 19), "HOST", HORIZONTAL_ALIGNMENT_CENTER, tag.size.x, 20, UiStyle.INK)
 
 	var character: int = _player.get("character", index)
 	var frame_px := Vector2(Art.CHEF_FRAME) * CHEF_SCALE

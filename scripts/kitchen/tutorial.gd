@@ -26,7 +26,7 @@ func _init(p_kitchen: Kitchen, p_orders: OrderManager) -> void:
 	steps = [
 		{"text": "Chegou um cliente ao salão! Quando aparecer o balão com \"!\", vai até à mesa dele e carrega em {pick} para anotar o pedido.",
 			"where": [calling_table], "done": func(): return orders.orders.size() >= 1},
-		{"text": "Pedido anotado: aparece à esquerda, num talão. Ele quer uma salada. Vai à caixa de alfaces e carrega em {pick} para pegar numa.",
+		{"text": "Pedido anotado: aparece à esquerda, em \"Para cozinhar\" e em \"Mesas\". Ele quer uma salada. Vai à caixa de alfaces e carrega em {pick} para pegar numa.",
 			"where": [lettuce], "done": func(): return _held_ids().has("lettuce")},
 		{"text": "Fica virado para uma tábua de cortar e carrega em {pick} para pousar a alface.",
 			"where": [board], "done": func(): return _board_ids().has("lettuce")},
@@ -38,7 +38,7 @@ func _init(p_kitchen: Kitchen, p_orders: OrderManager) -> void:
 			"where": [board], "done": func(): return _plate_has("lettuce_chopped")},
 		{"text": "Falta o tomate: pega num, corta-o na tábua e junta-o ao prato. (Podes pousar o prato numa bancada.)",
 			"where": [tomato, board], "done": func(): return _plate_matches("salad")},
-		{"text": "Salada pronta! Leva-a ao salão, fica virado para a mesa do cliente e carrega em {pick}.",
+		{"text": "Salada pronta! Leva-a ao salão, fica virado para a mesa do cliente e carrega em {pick}. (Com ajudantes, também a podes deixar no passe, o balcão com campainha, e eles levam-na.)",
 			"where": [waiting_table], "done": func(): return orders.delivered_count >= 1},
 		{"text": "Quando acaba de comer, o cliente levanta-se e vai pagar à caixa registadora. Fica virado para a caixa e mantém {use} carregado para lhe cobrar.",
 			"where": [register], "done": func(): return orders.paid_count >= 1},

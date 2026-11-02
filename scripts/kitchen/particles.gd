@@ -11,6 +11,8 @@ const CHOP_COLORS := {
 }
 
 var _items: Array[Dictionary] = []
+## Máximo atual (mais alto com "Partículas: Muitas").
+var limit := MAX
 
 
 func update(delta: float) -> void:
@@ -71,12 +73,22 @@ func dust(at: Vector2, dir: Vector2) -> void:
 		Color(0.95, 0.9, 0.8, 0.8), 2)
 
 
+## Pó a flutuar devagar num raio de luz.
+func mote(at: Vector2) -> void:
+	_add(at, Vector2(randf_range(-3, 3), randf_range(-4, 2)), 2.5, Color(1.0, 0.95, 0.75, 0.55), 1)
+
+
+## Faúlha a saltar do lume.
+func ember(at: Vector2) -> void:
+	_add(at, Vector2(randf_range(-8, 8), randf_range(-30, -18)), 0.6, Color("ffb347"), 1, Vector2(0, 30))
+
+
 func text(at: Vector2, value: String, color: Color) -> void:
-	if _items.size() < MAX:
+	if _items.size() < limit:
 		_items.append({"pos": at, "vel": Vector2(0, -20), "acc": Vector2.ZERO, "life": 1.2, "max": 1.2,
 			"color": color, "text": value})
 
 
 func _add(pos: Vector2, vel: Vector2, life: float, color: Color, size: int, acc := Vector2.ZERO) -> void:
-	if _items.size() < MAX:
+	if _items.size() < limit:
 		_items.append({"pos": pos, "vel": vel, "acc": acc, "life": life, "max": life, "color": color, "size": size})
