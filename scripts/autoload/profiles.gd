@@ -6,11 +6,14 @@ extends Node
 
 signal changed
 signal unlocked(profile_name: String, achievement: Dictionary)
+## Guardou-se depois de mudar o progresso (a conta online envia-o).
+signal saved
 
 const SAVE_PATH := "user://profiles.cfg"
 const GUEST := -1
 
-## Cada perfil: {"name", "stats": {}, "unlocked": {id: unix time}, "online": {"code", "secret"}}
+## Cada perfil: {"name", "stats": {}, "unlocked": {id: unix time}, "look": {} (CharacterLook),
+## "online": {"user", "token", "code"} (conta online, ver Online)}
 var profiles: Array[Dictionary] = []
 ## Perfil por defeito do primeiro jogador deste PC.
 var active := 0
@@ -63,7 +66,7 @@ func create(name: String, select := true) -> int:
 	var clean := name.strip_edges().left(16)
 	if clean.is_empty():
 		clean = "Chef %d" % (profiles.size() + 1)
-	profiles.append({"name": clean, "stats": {}, "unlocked": {}})
+	profiles.append({"name": clean, "stats": {}, "unlocked": {}, "look": CharacterLook.random()})
 	var index := profiles.size() - 1
 	if select:
 		active = index
@@ -253,11 +256,25 @@ func _load() -> void:
 		var section := "p%d" % i
 		profiles.append({"name": cfg.get_value(section, "name", "Chef"),
 			"stats": cfg.get_value(section, "stats", {}), "unlocked": cfg.get_value(section, "unlocked", {}),
+			"look": CharacterLook.clean(cfg.get_value(section, "look", CharacterLook.preset(i))),
 			"online": cfg.get_value(section, "online", {})})
 	active = clampi(cfg.get_value("meta", "active", 0), 0, maxi(profiles.size() - 1, 0))
 
 
-func save() -> void:
+## O boneco de um perfil (o dos convidados é um dos predefinidos).
+func look(index: int, fallback := 0) -> Dictionary:
+	if index >= 0 and index < profiles.size():
+		return profiles[index].get("look", CharacterLook.preset(index))
+	return CharacterLook.preset(fallback)
+
+
+func set_look(index: int, value: Dictionary) -> void:
+	if index >= 0 and index < profiles.size():
+		profiles[index]["look"] = CharacterLook.clean(value)
+		save()
+
+
+func save(progress_changed := true) -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("meta", "count", profiles.size())
 	cfg.set_value("meta", "active", active)
@@ -266,8 +283,11 @@ func save() -> void:
 		cfg.set_value(section, "name", profiles[i]["name"])
 		cfg.set_value(section, "stats", profiles[i]["stats"])
 		cfg.set_value(section, "unlocked", profiles[i]["unlocked"])
+		cfg.set_value(section, "look", profiles[i].get("look", {}))
 		cfg.set_value(section, "online", profiles[i].get("online", {}))
 	cfg.save(SAVE_PATH)
 	_dirty = false
 	_save_time = 0.0
 	changed.emit()
+	if progress_changed:
+		saved.emit()

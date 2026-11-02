@@ -16,7 +16,7 @@ var _join_pop := 0.0
 func set_player(player: Dictionary) -> void:
 	if player and not _player:
 		_join_pop = 1.0
-	elif player and _player and player.get("character") != _player.get("character"):
+	elif player and _player and (player.get("character") != _player.get("character") or player.get("look") != _player.get("look")):
 		_bump = 1.0
 	_player = player
 	queue_redraw()
@@ -61,7 +61,8 @@ func _draw() -> void:
 		draw_rect(tag, UiStyle.GOLD)
 		draw_string(font, tag.position + Vector2(0, 19), "HOST", HORIZONTAL_ALIGNMENT_CENTER, tag.size.x, 20, UiStyle.INK)
 
-	var character: int = _player.get("character", index)
+	var look := PlayerRegistry.look_of(_player) if joined else CharacterLook.preset(index)
+	var outfit: int = _player.get("role", 0)
 	var frame_px := Vector2(Art.CHEF_FRAME) * CHEF_SCALE
 	var center := Vector2(0, -4)
 	# Sombra e chef a andar no sítio, com um pulo ao trocar.
@@ -75,12 +76,14 @@ func _draw() -> void:
 	draw_set_transform(origin + Vector2(0, frame_px.y / 2.0 - 30), 0.0, Vector2(CHEF_SCALE * (1.0 + squash), CHEF_SCALE * (1.0 - squash)) * pop)
 	var tl := Vector2(-Art.CHEF_FRAME.x / 2.0, -Art.CHEF_FRAME.y + 5)
 	var modulate := Color.WHITE if joined else Color(0.25, 0.15, 0.12, 0.55)
-	Art.frame(self, Art.CHEFS[character], Art.CHEF_FRAME, col, row, tl, false, modulate)
-	Art.frame(self, Art.CHEF_TINT, Art.CHEF_FRAME, col, row, tl, false, color * modulate if joined else modulate)
+	if joined:
+		CharacterLook.draw(self, look, outfit, col, row, tl, false, modulate)
+	else:
+		CharacterLook.draw_silhouette(self, look, outfit, col, row, tl, false, modulate)
 	draw_set_transform(size / 2.0, 0.0, Vector2(pop, pop))
 
 	if joined:
-		draw_string(font, Vector2(rect.position.x, 120), Art.CHEF_NAMES[character], HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 34, UiStyle.INK)
+		draw_string(font, Vector2(rect.position.x, 120), PlayerRegistry.look_name(_player), HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 34, UiStyle.INK)
 		# Papel escolhido (cima/baixo).
 		var role: int = _player.get("role", 0)
 		var role_rect := Rect2(Vector2(rect.position.x + 20, 132), Vector2(rect.size.x - 40, 28))

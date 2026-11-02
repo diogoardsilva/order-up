@@ -88,9 +88,11 @@ No lobby, cada jogador escolhe o seu chef com esquerda/direita (6 personagens) e
 
 ## Perfis e conquistas
 
-Em **Perfis e conquistas** (menu principal) criam-se perfis com nome. Cada perfil tem as suas estatísticas e **51 conquistas** (servir pratos, cobrar, cortar, estrelas em cada restaurante, Casa Aberta, online...). Dez são **escondidas** e só mostram o nome quando se ganham. Quando se ganha uma, aparece um aviso em cima com o nome e o porquê. Os perfis ficam guardados neste PC.
+Em **Perfis e conquistas** (menu principal) criam-se perfis com nome. Cada perfil tem as suas estatísticas e **53 conquistas** (servir pratos, cobrar, cortar, estrelas em cada restaurante, Casa Aberta, online...). Dez são **escondidas** e só mostram o nome quando se ganham. Quando se ganha uma, aparece um aviso em cima com o nome e o porquê. Os perfis ficam guardados neste PC.
 
-**Amigos online** (Perfis e conquistas > Amigos online): cada perfil recebe um código de amigo de 6 letras. Escrevam o código dos outros para ficarem amigos; a lista mostra quem está online e, se um amigo tiver uma sala aberta, dá para entrar logo. Os perfis online ficam no Supabase do projeto (`supabase/migrations/`); o URL e a chave pública vão em `scripts/autoload/online.gd`.
+**Conta online e amigos** (Perfis e conquistas > Conta online e amigos): cria-se uma conta com utilizador e palavra-passe, ou entra-se numa que já existe. O progresso do perfil (estatísticas, conquistas e o boneco) fica na conta: com o mesmo utilizador no Windows, no Mac ou no Linux tem-se tudo igual, e os dois lados juntam-se sem perder nada. Cada conta tem um código de amigo de 6 letras; adicionam-se amigos pelo código ou pelo utilizador, a lista mostra quem está online e, se um amigo tiver uma sala aberta, dá para entrar logo. As contas ficam no Supabase do projeto: corre-se `supabase/migrations/*_accounts.sql` uma vez no SQL Editor; o URL e a chave pública vão em `scripts/autoload/online.gd`.
+
+**O meu boneco** (Perfis e conquistas > O meu boneco): cada perfil tem um boneco com pele, cabelo (7 estilos, 10 cores), cara (bigode, barba, sardas, óculos) e uma cor especial. A roupa muda com a função escolhida no lobby: Livre (t-shirt), Cozinheiro (barrete e jaleca), Ajudante de cozinha (lenço e avental), Empregado de mesa (colete e laço), Host (fato e gravata) e Barman (boné e avental). No lobby, esquerda/direita troca entre o teu boneco e os predefinidos; os ajudantes também vestem a roupa da função.
 
 ## Gráficos
 

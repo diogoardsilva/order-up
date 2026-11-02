@@ -32,8 +32,9 @@ var facing := Vector2.DOWN
 var emote_left := 0.0
 ## Última posição recebida pela rede (chefs remotos).
 var net_target := Vector2.ZERO
-## Índice do personagem escolhido no lobby (Art.CHEFS).
-var character := 0
+## Boneco (CharacterLook) e roupa (a função: 0 Livre ... 5 Barman).
+var look: Dictionary = CharacterLook.preset(0)
+var outfit := 0
 
 var _dash_left := 0.0
 var _dash_cooldown := 0.0
@@ -181,7 +182,7 @@ func _draw() -> void:
 	for t in _trail:
 		var a: float = t["life"] / 0.18 * 0.45
 		var ghost_tl: Vector2 = top_left + (t["pos"] as Vector2) - position
-		Art.frame(self, Art.CHEF_TINT, Art.CHEF_FRAME, col, row, ghost_tl, flip, Color(color, a))
+		CharacterLook.draw_silhouette(self, look, outfit, col, row, ghost_tl, flip, Color(color, a))
 	# Saltos: ao festejar no fim da ronda e com o emote.
 	var jump := 0.0
 	if celebrate:
@@ -189,6 +190,10 @@ func _draw() -> void:
 	elif emote_left > EMOTE_TIME - 0.35:
 		jump = sin((EMOTE_TIME - emote_left) / 0.35 * PI) * 6.0
 	kitchen.draw_actor_shadow(self, Vector2(0, 7), position, 6.0 - jump * 0.3)
+	# Anel na cor do jogador, aos pés (para se saber quem é quem).
+	draw_set_transform(Vector2(0, 7), 0.0, Vector2(1.0, 0.45))
+	draw_arc(Vector2.ZERO, 8.0, 0.0, TAU, 20, Color(color, 0.75), 1.6)
+	draw_set_transform(Vector2.ZERO)
 	# Esmaga e estica a partir dos pés.
 	var sq := sin(_squash * PI) * 0.18
 	# A trabalhar: o corpo sobe e desce ao ritmo da faca/esponja.
@@ -202,13 +207,12 @@ func _draw() -> void:
 	# Ultra: reflexo ténue no chão polido.
 	if Gfx.textures >= 3 and jump == 0.0:
 		draw_set_transform(Vector2(0, 8), 0.0, Vector2(1.0, -0.4))
-		Art.frame(self, Art.CHEF_TINT, Art.CHEF_FRAME, col, row, tl, flip, Color(color, 0.12))
+		CharacterLook.draw_silhouette(self, look, outfit, col, row, tl, flip, Color(color, 0.12))
 		draw_set_transform(Vector2(0, 8 - jump), 0.0, Vector2(1.0 + sq, 1.0 - sq + breathe))
 	# De costas, o que leva na mão fica escondido atrás do corpo.
 	if held and row == 1:
 		ItemArt.draw_item(self, held, hand)
-	Art.frame(self, Art.CHEFS[character], Art.CHEF_FRAME, col, row, tl, flip)
-	Art.frame(self, Art.CHEF_TINT, Art.CHEF_FRAME, col, row, tl, flip, color)
+	CharacterLook.draw(self, look, outfit, col, row, tl, flip)
 	if held and row != 1:
 		ItemArt.draw_item(self, held, hand)
 	draw_set_transform(Vector2.ZERO)

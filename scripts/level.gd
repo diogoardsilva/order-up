@@ -97,7 +97,9 @@ func _ready() -> void:
 		chef.source = p["source"]
 		chef.color = p["color"]
 		chef.slot = p["slot"]
-		chef.character = p.get("character", 0)
+		chef.look = PlayerRegistry.look_of(p)
+		chef.outfit = p.get("role", 0)
+		chef.set_meta("label", "P%d %s" % [p["slot"] + 1, p.get("name", "") if p.get("name", "") != "" else PlayerRegistry.look_name(p)])
 		chef.kitchen = _kitchen
 		chef.position = _kitchen.spawns[p["slot"]]
 		chef.is_local = not p["source"] is RemoteSource
@@ -781,10 +783,9 @@ func _draw_players() -> void:
 		var s := 3.0 if h > 100 else 2.4
 		var top_left := rect.position + Vector2(70 - 8 * s, 10 + bob)
 		_hud.draw_set_transform(top_left, 0.0, Vector2(s, s))
-		Art.frame(_hud, Art.CHEFS[chef.character], Art.CHEF_FRAME, 0, 0, Vector2.ZERO)
-		Art.frame(_hud, Art.CHEF_TINT, Art.CHEF_FRAME, 0, 0, Vector2.ZERO, false, chef.color)
+		CharacterLook.draw(_hud, chef.look, chef.outfit, 0, 0, Vector2.ZERO)
 		_hud.draw_set_transform(Vector2.ZERO)
-		var label := _helper_name(chef.slot) if chef.slot >= HELPER_SLOT else "P%d %s" % [chef.slot + 1, Art.CHEF_NAMES[chef.character]]
+		var label := _helper_name(chef.slot) if chef.slot >= HELPER_SLOT else str(chef.get_meta("label", "P%d" % (chef.slot + 1)))
 		_hud.draw_string(UiStyle.FONT, rect.position + Vector2(0, h - 8), label,
 			HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 16, chef.color.darkened(0.35))
 		y += h + 8
@@ -800,10 +801,9 @@ func _draw_players_compact(y: float) -> void:
 		var s := clampf(h / 22.0, 1.4, 2.2)
 		var bob := roundf(sin(_clock * 3.0 + chef.slot) * 1.0)
 		_hud.draw_set_transform(rect.position + Vector2(6, 2 + bob), 0.0, Vector2(s, s))
-		Art.frame(_hud, Art.CHEFS[chef.character], Art.CHEF_FRAME, 0, 0, Vector2.ZERO, false, Color.WHITE)
-		Art.frame(_hud, Art.CHEF_TINT, Art.CHEF_FRAME, 0, 0, Vector2.ZERO, false, chef.color)
+		CharacterLook.draw(_hud, chef.look, chef.outfit, 0, 0, Vector2.ZERO)
 		_hud.draw_set_transform(Vector2.ZERO)
-		var label := _helper_name(chef.slot) if chef.slot >= HELPER_SLOT else "P%d %s" % [chef.slot + 1, Art.CHEF_NAMES[chef.character]]
+		var label := _helper_name(chef.slot) if chef.slot >= HELPER_SLOT else str(chef.get_meta("label", "P%d" % (chef.slot + 1)))
 		_hud.draw_string(UiStyle.FONT, rect.position + Vector2(44, h / 2.0 + 6), label, HORIZONTAL_ALIGNMENT_LEFT, 92,
 			_fit_size(label, 92, 17, 11), chef.color.darkened(0.45))
 		y += h + 3
@@ -966,7 +966,9 @@ func _add_helper(index: int, preset: int) -> void:
 	var chef := Chef.new()
 	chef.slot = HELPER_SLOT + index
 	chef.color = HELPER_COLORS[index]
-	chef.character = [2, 4, 5, 3, 1, 0][role]
+	# Os ajudantes vestem a roupa da função (HelperAI.Role -> roupa).
+	chef.look = CharacterLook.preset([2, 4, 5, 3, 1, 0][role] + index)
+	chef.outfit = [3, 1, 4, 3, 2, 5][role]
 	chef.kitchen = _kitchen
 	# Começa no sítio do trabalho dele (o segundo um pouco ao lado).
 	var start: Vector2i = {

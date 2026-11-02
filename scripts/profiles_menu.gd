@@ -17,6 +17,7 @@ var _filter := 0  # 0 todas, 1 ganhas, 2 por ganhar
 var _filter_button: Button
 var _first: Button
 var _friends: FriendsMenu
+var _character: CharacterMenu
 
 
 func _ready() -> void:
@@ -52,7 +53,11 @@ func _ready() -> void:
 	left.add_child(UiStyle.button("Apagar este perfil", func():
 		Profiles.remove(Profiles.active)
 		_refresh(), 340))
-	left.add_child(UiStyle.button("Amigos online", _show_friends, 340))
+	left.add_child(UiStyle.button("O meu boneco", func():
+		Sfx.play("ui_confirm")
+		_character.show()
+		_character.focus_first(), 340))
+	left.add_child(UiStyle.button("Conta online e amigos", _show_friends, 340))
 	left.add_child(UiStyle.button("Voltar", func(): closed.emit(), 340))
 
 	var right := VBoxContainer.new()
@@ -88,6 +93,13 @@ func _ready() -> void:
 		_friends.hide()
 		focus_first())
 	add_child(_friends)
+	_character = CharacterMenu.new()
+	_character.hide()
+	_character.closed.connect(func():
+		_character.hide()
+		_refresh()
+		focus_first())
+	add_child(_character)
 	Profiles.changed.connect(_refresh)
 	_refresh()
 
@@ -119,7 +131,8 @@ func _refresh() -> void:
 	for i in Profiles.profiles.size():
 		var p: Dictionary = Profiles.profiles[i]
 		var mark := "● " if i == Profiles.active else "   "
-		var b := UiStyle.button("%s%s  (%d)" % [mark, p["name"], Profiles.unlocked_count(i)], func():
+		var cloud := "  · online" if Online.logged_in(i) else ""
+		var b := UiStyle.button("%s%s  (%d)%s" % [mark, p["name"], Profiles.unlocked_count(i), cloud], func():
 			Profiles.active = i
 			Profiles.save()
 			Sfx.play("ui_confirm")
@@ -169,7 +182,7 @@ func _draw_tile(tile: Control, a: Dictionary, got: bool, progress: float) -> voi
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if visible and not _friends.visible and event.is_action_pressed("ui_cancel") and not _name_edit.has_focus():
+	if visible and not _friends.visible and not _character.visible and event.is_action_pressed("ui_cancel") and not _name_edit.has_focus():
 		get_viewport().set_input_as_handled()
 		Sfx.play("ui_back")
 		closed.emit()

@@ -73,6 +73,8 @@ static func _build() -> void:
 	_add("zero", "Dia para esquecer", "Acabar uma ronda com 0 pontos.", "zero_round", 1, "storm", true)
 	_add("night_owl", "Coruja", "Jogar entre a meia-noite e as 5 da manhã.", "night", 1, "clock", true)
 	_add("speed_1", "Relâmpago", "Servir 30 pratos numa só ronda.", "served_round_best", 30, "boot", true)
+	_add("look", "Estilo próprio", "Personalizar o teu boneco.", "custom_look", 1, "hat")
+	_add("account", "Na nuvem", "Criar uma conta online ou entrar numa.", "account", 1, "net")
 	_add("remap", "À minha medida", "Trocar um botão nos Comandos.", "remap", 1, "gear", true)
 	_add("all_s3", "Estrela de todos", "Ganhar 3 estrelas em todos os restaurantes.", "levels_s3", Levels.ALL.size(), "star", true)
 	_add("hard_all", "Ninguém nos para", "Ganhar 3 estrelas no Difícil em todos os restaurantes.", "levels_hard3", Levels.ALL.size(), "fire", true)
