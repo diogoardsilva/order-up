@@ -9,7 +9,7 @@ extends Node
 signal friends_changed
 signal status_changed
 
-const URL := ""
+const URL := "https://cbwkqshpblvvkxnohpfp.supabase.co"
 const ANON_KEY := ""
 const HEARTBEAT_EVERY := 30.0
 
