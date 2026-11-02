@@ -1,0 +1,111 @@
+class_name Levels
+## Os restaurantes (níveis). Todos usam a mesma planta; mudam os ingredientes
+## das caixas, os pratos pedidos e a decoração do salão. A cozinha tem duas
+## zonas iguais (em cima e em baixo) com os ingredientes ao meio, para dois
+## cozinheiros trabalharem ao mesmo tempo.
+
+## Legenda: . chão, C bancada (parede no salão), a-e caixas de ingredientes
+## (pela ordem de "crates"), B tábua de cortar, S fogão, P pratos limpos,
+## W lava-loiça, X lixo, M mesa para 2, N/n mesa para 4 (metade de cima/baixo),
+## R caixa registadora, H passe (balcão com campainha entre a cozinha e o salão,
+## onde se deixam os pratos prontos), E porta de entrada dos clientes, 1-4 início dos chefs.
+const LAYOUT: Array[String] = [
+	"CCBBCSSCCCCCCCCCCCCC",
+	"C..........H.......C",
+	"C..1.......H.M..N..C",
+	"C......3...H....n..C",
+	"P..........C.M.....C",
+	"W..................C",
+	"X.CabcdeC.......R..C",
+	"W..........C.......C",
+	"P..........C.M.....C",
+	"C......4...H....N..C",
+	"C..2.......H.M..n..C",
+	"C..........H.......E",
+	"CCBBCSSCCCCCCCCCCCCC",
+]
+
+const ALL: Array[Dictionary] = [
+	{"id": "classic", "stove": "pot", "name": "O Primeiro Dia", "place": "Restaurante do bairro", "theme": "classic",
+		"crates": ["tomato", "lettuce"], "dishes": ["salad", "soup"], "stars": [60, 150, 260]},
+	{"id": "tasca", "stove": "pan", "name": "Tasca do Zé", "place": "Portugal", "theme": "portugal",
+		"crates": ["steak", "egg", "potato", "cod", "kale"], "dishes": ["bitoque", "bras", "caldo"], "stars": [80, 200, 340]},
+	{"id": "sushi", "stove": "pot", "name": "Sakura Sushi", "place": "Japão", "theme": "japan",
+		"crates": ["rice", "salmon", "nori", "cucumber"], "dishes": ["sashimi", "nigiri", "maki"], "stars": [70, 180, 300]},
+	{"id": "diner", "stove": "pan", "name": "Rocket Diner", "place": "Estados Unidos", "theme": "diner",
+		"crates": ["bun", "patty", "lettuce", "cheese", "potato"], "dishes": ["burger", "cheeseburger", "fries"], "stars": [80, 200, 340]},
+	{"id": "trattoria", "stove": "oven", "name": "Trattoria Nonna", "place": "Itália", "theme": "italy",
+		"crates": ["dough", "tomato", "cheese", "pasta"], "dishes": ["pizza", "spaghetti", "caprese"], "stars": [80, 200, 340]},
+]
+
+## Nome de cada ingrediente (para as caixas e o tutorial).
+const INGREDIENT_NAMES := {
+	"tomato": "Tomate", "lettuce": "Alface", "steak": "Bife", "egg": "Ovos", "potato": "Batatas",
+	"cod": "Bacalhau", "kale": "Couve", "rice": "Arroz", "salmon": "Salmão", "nori": "Alga",
+	"cucumber": "Pepino", "bun": "Pão", "patty": "Carne", "cheese": "Queijo", "pasta": "Esparguete",
+	"dough": "Massa",
+}
+
+
+## Nome do que sai do fogão.
+const PRODUCT_NAMES := {
+	"soup": "Sopa", "caldo": "Caldo verde", "steak_cooked": "Bife grelhado", "egg_fried": "Ovo estrelado",
+	"fries": "Batata frita", "bras": "Bacalhau à Brás", "rice_cooked": "Arroz cozido", "patty_cooked": "Carne grelhada",
+	"pizza": "Pizza", "pasta_cooked": "Esparguete cozido",
+}
+## Nome de um ingrediente no singular (para o que se leva na mão).
+const SINGULAR := {"egg": "Ovo", "potato": "Batata"}
+
+
+## Nome de um conteúdo, ex. "potato_chopped" -> "Batata cortada".
+static func content_name(id: String) -> String:
+	if PRODUCT_NAMES.has(id):
+		return PRODUCT_NAMES[id]
+	var raw := id.trim_suffix("_chopped")
+	var name: String = SINGULAR.get(raw, INGREDIENT_NAMES.get(raw, raw))
+	if id.ends_with("_chopped"):
+		# Concorda com o género: "Batata cortada", "Bacalhau cortado".
+		name += " cortada" if name.ends_with("a") or name == "Couve" or name == "Alface" else " cortado"
+	return name
+
+
+## Nome do que um chef leva: ingrediente, prato (o nome do prato se estiver
+## completo) ou panela com o que tem dentro.
+static func item_name(item: Item) -> String:
+	if item == null:
+		return ""
+	if item.is_ingredient():
+		return content_name(item.content_id())
+	if item.is_plate():
+		if item.dirty:
+			return "Pratos sujos" if item.stack > 1 else "Prato sujo"
+		if item.contents.is_empty():
+			return "%d pratos" % item.stack if item.stack > 1 else "Prato vazio"
+		var dish := Recipes.match_plate(item.contents)
+		var text: String = dish["name"] if not dish.is_empty() else " + ".join(item.contents.map(content_name))
+		if item.second:
+			text += " e " + item_name(item.second)
+		return text
+	if item.is_cookware():
+		var tool: String = {"pot": "Panela", "pan": "Frigideira", "oven": "Forno"}.get(item.tool, "Panela")
+		match item.cook_state:
+			Item.Cook.READY:
+				return "%s: %s pronto" % [tool, content_name(item.product)]
+			Item.Cook.BURNT:
+				return "%s: queimado!" % tool
+		if item.contents.is_empty():
+			return tool
+		return "%s: %s" % [tool, " + ".join(item.contents.map(content_name))]
+	return ""
+
+
+static func get_level(index: int) -> Dictionary:
+	return ALL[clampi(index, 0, ALL.size() - 1)]
+
+
+## Pratos que se pedem neste nível.
+static func dishes(level: Dictionary) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for id in level["dishes"]:
+		result.append(Recipes.by_id(id))
+	return result

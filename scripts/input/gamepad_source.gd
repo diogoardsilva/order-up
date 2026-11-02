@@ -2,18 +2,19 @@ class_name GamepadSource
 extends InputSource
 ## Um comando ligado (DualShock 4, DualSense, Xbox...). O Godot usa SDL, que
 ## reconhece o DS4 por USB e Bluetooth sem DS4Windows: Cruz = A, Círculo = B,
-## Quadrado = X, Triângulo = Y, Options = Start.
+## Quadrado = X, Triângulo = Y, L1 = LB, Options = Start.
 
 const DEADZONE := 0.25
 const BUTTONS := {
 	&"pick": JOY_BUTTON_A,
 	&"use": JOY_BUTTON_X,
 	&"dash": JOY_BUTTON_B,
-	&"emote": JOY_BUTTON_Y,
+	&"throw": JOY_BUTTON_Y,
+	&"emote": JOY_BUTTON_LEFT_SHOULDER,
 	&"pause": JOY_BUTTON_START,
 }
-const PS_NAMES := {&"pick": "Cruz", &"use": "Quadrado", &"dash": "Círculo", &"emote": "Triângulo", &"pause": "Options"}
-const XBOX_NAMES := {&"pick": "A", &"use": "X", &"dash": "B", &"emote": "Y", &"pause": "Menu"}
+const PS_NAMES := {&"pick": "Cruz", &"use": "Quadrado", &"dash": "Círculo", &"throw": "Triângulo", &"emote": "L1", &"pause": "Options"}
+const XBOX_NAMES := {&"pick": "A", &"use": "X", &"dash": "B", &"throw": "Y", &"emote": "LB", &"pause": "Menu"}
 
 var device: int
 

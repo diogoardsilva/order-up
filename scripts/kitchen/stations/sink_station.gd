@@ -17,8 +17,13 @@ func interact(held: Item) -> Item:
 			return Item.plate()
 		return null
 	if held.is_plate() and held.dirty:
-		dirty += 1
+		dirty += held.stack
 		return null
+	# Com um prato limpo na mão, leva-se mais um.
+	if clean > 0 and held.can_stack(Item.plate()):
+		clean -= 1
+		held.stack += 1
+		return held
 	return held
 
 
@@ -32,5 +37,19 @@ func use(delta: float) -> void:
 		clean += 1
 
 
+func _get_extra() -> Variant:
+	return null if dirty == 0 and clean == 0 else [dirty, clean, _wash]
+
+
+func _set_extra(extra: Variant) -> void:
+	dirty = extra[0] if extra != null else 0
+	clean = extra[1] if extra != null else 0
+	_wash = extra[2] if extra != null else 0.0
+
+
 func progress() -> float:
 	return _wash / WASH_TIME if _wash > 0.0 else -1.0
+
+
+func catch(_thrown: Item) -> bool:
+	return false

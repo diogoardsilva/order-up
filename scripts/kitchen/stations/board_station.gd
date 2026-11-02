@@ -16,12 +16,20 @@ func interact(held: Item) -> Item:
 
 
 func use(delta: float) -> void:
-	if item == null or item.is_plate() or item.chopped:
+	if item == null or not item.can_chop():
 		return
 	_chop += delta
 	if _chop >= CHOP_TIME:
 		item.chopped = true
 		_chop = 0.0
+
+
+func _get_extra() -> Variant:
+	return _chop if _chop > 0.0 else null
+
+
+func _set_extra(extra: Variant) -> void:
+	_chop = extra if extra != null else 0.0
 
 
 func progress() -> float:
