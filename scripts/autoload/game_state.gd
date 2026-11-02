@@ -13,8 +13,32 @@ const HELPER_PRESETS: Array = [
 	["Cozinheiro (zona de cima)", 1, 1, "Cozinha só na zona de cima e deixa os pratos no passe de cima."],
 	["Cozinheiro (zona de baixo)", 1, 2, "Cozinha só na zona de baixo e deixa os pratos no passe de baixo."],
 	["Cozinheiro (cozinha toda)", 1, 0, "Cozinha onde estiver livre e deixa os pratos no passe."],
+	["Ajudante de cozinha", 4, 0, "Corta os ingredientes que vão fazer falta e deixa-os nas bancadas, e lava a loiça."],
+	["Barman", 5, 0, "Tira as bebidas no bar e leva-as às mesas. Quando não há bebidas, ajuda a levar pratos."],
 ]
-const MAX_HELPERS := 2
+## Papéis que um jogador pode escolher no lobby: [nome, descrição]. O papel
+## diz onde começa e o que os ajudantes deixam para ele.
+const PLAYER_ROLES: Array = [
+	["Livre", "Faz um bocadinho de tudo."],
+	["Cozinheiro", "Cozinha os pratos."],
+	["Ajudante de cozinha", "Corta ingredientes e lava a loiça."],
+	["Empregado de mesa", "Anota, leva os pratos e cobra."],
+	["Host", "Recebe os clientes e cobra."],
+	["Barman", "Tira as bebidas e leva-as às mesas."],
+]
+const MAX_HELPERS := 8
+
+## Dificuldade: [nome, paciência dos clientes (x), intervalo entre grupos (x), minutos da ronda].
+const DIFFICULTIES: Array = [
+	["Fácil", 2.2, 1.35, 5],
+	["Normal", 1.6, 1.0, 4],
+	["Difícil", 1.0, 0.8, 3],
+	["Personalizado", 0.0, 0.0, 0],
+]
+## Opções do modo personalizado.
+const CUSTOM_PATIENCE: Array = [[0.75, "Pouca (x0.75)"], [1.0, "Normal (x1)"], [1.6, "Mais (x1.6)"], [2.2, "Muita (x2.2)"], [3.0, "Imensa (x3)"], [5.0, "Infinita quase (x5)"]]
+const CUSTOM_SPAWN: Array = [[1.8, "Muito poucos"], [1.35, "Poucos"], [1.0, "Normal"], [0.8, "Muitos"], [0.6, "Imensos"]]
+const CUSTOM_TIME: Array = [[2, "2 min"], [3, "3 min"], [4, "4 min"], [5, "5 min"], [8, "8 min"], [12, "12 min"]]
 
 const SAVE_PATH := "user://save.cfg"
 
@@ -22,10 +46,13 @@ var mode := Mode.PLAY
 ## Restaurante escolhido (índice em Levels.ALL).
 var level := 0
 ## Opção escolhida para cada ajudante (índice em HELPER_PRESETS).
-var helpers: Array = [1, 0]
+var helpers: Array = [1, 0, 0, 0, 0, 0, 0, 0]
 ## Modo Casa Aberta: sem relógio, abre-se a porta quando se quer e só acaba
 ## quando se fecha.
 var endless := false
+var difficulty := 1
+## Índices nas opções do modo personalizado: [paciência, clientes, tempo].
+var custom := [2, 2, 2]
 var tutorial_done := false
 var last_ip := ""
 ## Mensagem a mostrar no menu (ex. ligação perdida).
@@ -46,13 +73,19 @@ func _ready() -> void:
 	if cfg.load(SAVE_PATH) == OK:
 		tutorial_done = cfg.get_value("progress", "tutorial_done", false)
 		endless = cfg.get_value("progress", "endless", false)
+		difficulty = clampi(cfg.get_value("progress", "difficulty", 1), 0, DIFFICULTIES.size() - 1)
+		var c: Variant = cfg.get_value("progress", "custom", custom)
+		if c is Array and c.size() == 3:
+			custom = [clampi(c[0], 0, CUSTOM_PATIENCE.size() - 1), clampi(c[1], 0, CUSTOM_SPAWN.size() - 1), clampi(c[2], 0, CUSTOM_TIME.size() - 1)]
 		last_ip = cfg.get_value("net", "last_ip", "")
 		fullscreen = cfg.get_value("options", "fullscreen", true)
 		music_volume = cfg.get_value("options", "music_volume", 0.5)
 		sfx_volume = cfg.get_value("options", "sfx_volume", 0.8)
 		var saved: Variant = cfg.get_value("progress", "helpers", helpers)
-		if saved is Array and saved.size() == MAX_HELPERS:
-			helpers = saved.map(func(h): return clampi(int(h), 0, HELPER_PRESETS.size() - 1))
+		if saved is Array and saved.size() >= 1:
+			helpers = saved.map(func(h): return clampi(int(h), 0, HELPER_PRESETS.size() - 1)).slice(0, MAX_HELPERS)
+	while helpers.size() < MAX_HELPERS:
+		helpers.append(0)
 	_apply_window()
 	_apply_volumes()
 
@@ -111,6 +144,21 @@ func save_stars(level_id: String, stars: int) -> void:
 func mark_tutorial_done() -> void:
 	tutorial_done = true
 	_save("progress", "tutorial_done", true)
+
+
+func set_difficulty(index: int, p_custom: Array) -> void:
+	difficulty = index
+	custom = p_custom.duplicate()
+	_save("progress", "difficulty", difficulty)
+	_save("progress", "custom", custom)
+
+
+## Valores da dificuldade atual: {"patience", "spawn", "minutes"}.
+func difficulty_values() -> Dictionary:
+	if difficulty == DIFFICULTIES.size() - 1:
+		return {"patience": CUSTOM_PATIENCE[custom[0]][0], "spawn": CUSTOM_SPAWN[custom[1]][0], "minutes": CUSTOM_TIME[custom[2]][0]}
+	var d: Array = DIFFICULTIES[difficulty]
+	return {"patience": d[1], "spawn": d[2], "minutes": d[3]}
 
 
 func set_endless(on: bool) -> void:

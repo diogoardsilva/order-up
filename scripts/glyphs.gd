@@ -5,8 +5,7 @@ class_name Glyphs
 ## nome. Desenhado com primitivas, por isso fica nítido em qualquer tamanho.
 
 const PS_COLORS := {"cross": Color("8fb6ea"), "circle": Color("ff6f6f"), "square": Color("eb94d6"), "triangle": Color("45d6ae")}
-const PS_BUTTON := {&"pick": "cross", &"use": "square", &"dash": "circle", &"throw": "triangle", &"emote": "L1", &"pause": "OPTIONS"}
-const XBOX_BUTTON := {&"pick": "A", &"use": "X", &"dash": "B", &"throw": "Y", &"emote": "LB", &"pause": "MENU"}
+## Que botão faz cada ação vem de Controls (os jogadores podem trocá-los).
 const XBOX_COLORS := {"A": Color("6cc24a"), "B": Color("e8574d"), "X": Color("4d8fe8"), "Y": Color("f2c94c")}
 const BODY := Color("2b2631")
 const BODY_LIGHT := Color("4a4352")
@@ -25,9 +24,10 @@ static func info(source: InputSource, action: StringName) -> Dictionary:
 		var pad := source as GamepadSource
 		if action == &"move":
 			return {"kind": "stick", "id": ""}
-		if pad.is_playstation():
-			return {"kind": "ps", "id": PS_BUTTON.get(action, "")}
-		return {"kind": "xbox", "id": XBOX_BUTTON.get(action, "")}
+		if not Controls.pad.has(action):
+			return {"kind": "ps" if pad.is_playstation() else "xbox", "id": ""}
+		var code: int = Controls.pad[action]
+		return {"kind": "ps" if pad.is_playstation() else "xbox", "id": Controls.pad_name(code, pad.is_playstation())}
 	if source is KeyboardSource:
 		if action == &"move":
 			return {"kind": "key", "id": "WASD" if (source as KeyboardSource).layout == 0 else "Setas"}

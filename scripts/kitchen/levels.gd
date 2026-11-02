@@ -8,33 +8,35 @@ class_name Levels
 ## (pela ordem de "crates"), B tábua de cortar, S fogão, P pratos limpos,
 ## W lava-loiça, X lixo, M mesa para 2, N/n mesa para 4 (metade de cima/baixo),
 ## R caixa registadora, H passe (balcão com campainha entre a cozinha e o salão,
-## onde se deixam os pratos prontos), E porta de entrada dos clientes, 1-4 início dos chefs.
+## onde se deixam os pratos prontos), E porta de entrada dos clientes, D bar (torneira de
+## bebidas na parede do salão), 1-4 início dos chefs. As pilhas de pratos do meio (P na
+## coluna do passe) dão para a cozinha e para o salão.
 const LAYOUT: Array[String] = [
-	"CCBBCSSCCCCCCCCCCCCC",
+	"CBBBSSSCCCCCCCCCCCCC",
 	"C..........H.......C",
 	"C..1.......H.M..N..C",
-	"C......3...H....n..C",
-	"P..........C.M.....C",
+	"W......3...H....n..C",
+	"P..........P.M.....D",
 	"W..................C",
 	"X.CabcdeC.......R..C",
 	"W..........C.......C",
-	"P..........C.M.....C",
-	"C......4...H....N..C",
+	"P..........P.M.....D",
+	"W......4...H....N..C",
 	"C..2.......H.M..n..C",
 	"C..........H.......E",
-	"CCBBCSSCCCCCCCCCCCCC",
+	"CBBBSSSCCCCCCCCCCCCC",
 ]
 
 const ALL: Array[Dictionary] = [
-	{"id": "classic", "stove": "pot", "name": "O Primeiro Dia", "place": "Restaurante do bairro", "theme": "classic",
+	{"id": "classic", "drinks": ["water", "juice"], "stove": "pot", "name": "O Primeiro Dia", "place": "Restaurante do bairro", "theme": "classic",
 		"crates": ["tomato", "lettuce"], "dishes": ["salad", "soup"], "stars": [60, 150, 260]},
-	{"id": "tasca", "stove": "pan", "name": "Tasca do Zé", "place": "Portugal", "theme": "portugal",
+	{"id": "tasca", "drinks": ["wine", "coffee"], "stove": "pan", "name": "Tasca do Zé", "place": "Portugal", "theme": "portugal",
 		"crates": ["steak", "egg", "potato", "cod", "kale"], "dishes": ["bitoque", "bras", "caldo"], "stars": [80, 200, 340]},
-	{"id": "sushi", "stove": "pot", "name": "Sakura Sushi", "place": "Japão", "theme": "japan",
+	{"id": "sushi", "drinks": ["tea", "water"], "stove": "pot", "name": "Sakura Sushi", "place": "Japão", "theme": "japan",
 		"crates": ["rice", "salmon", "nori", "cucumber"], "dishes": ["sashimi", "nigiri", "maki"], "stars": [70, 180, 300]},
-	{"id": "diner", "stove": "pan", "name": "Rocket Diner", "place": "Estados Unidos", "theme": "diner",
+	{"id": "diner", "drinks": ["soda", "shake"], "stove": "pan", "name": "Rocket Diner", "place": "Estados Unidos", "theme": "diner",
 		"crates": ["bun", "patty", "lettuce", "cheese", "potato"], "dishes": ["burger", "cheeseburger", "fries"], "stars": [80, 200, 340]},
-	{"id": "trattoria", "stove": "oven", "name": "Trattoria Nonna", "place": "Itália", "theme": "italy",
+	{"id": "trattoria", "drinks": ["wine", "coffee"], "stove": "oven", "name": "Trattoria Nonna", "place": "Itália", "theme": "italy",
 		"crates": ["dough", "tomato", "cheese", "pasta"], "dishes": ["pizza", "spaghetti", "caprese"], "stars": [80, 200, 340]},
 ]
 
@@ -52,6 +54,8 @@ const PRODUCT_NAMES := {
 	"soup": "Sopa", "caldo": "Caldo verde", "steak_cooked": "Bife grelhado", "egg_fried": "Ovo estrelado",
 	"fries": "Batata frita", "bras": "Bacalhau à Brás", "rice_cooked": "Arroz cozido", "patty_cooked": "Carne grelhada",
 	"pizza": "Pizza", "pasta_cooked": "Esparguete cozido",
+	"water": "Água", "juice": "Sumo de laranja", "wine": "Vinho", "coffee": "Café", "tea": "Chá verde",
+	"soda": "Refrigerante", "shake": "Batido",
 }
 ## Nome de um ingrediente no singular (para o que se leva na mão).
 const SINGULAR := {"egg": "Ovo", "potato": "Batata"}
@@ -76,6 +80,9 @@ static func item_name(item: Item) -> String:
 		return ""
 	if item.is_ingredient():
 		return content_name(item.content_id())
+	if item.is_glass():
+		var drink := content_name(item.contents[0]) if not item.contents.is_empty() else "Copo"
+		return drink + (" e " + item_name(item.second) if item.second else "")
 	if item.is_plate():
 		if item.dirty:
 			return "Pratos sujos" if item.stack > 1 else "Prato sujo"
@@ -104,6 +111,13 @@ static func get_level(index: int) -> Dictionary:
 
 
 ## Pratos que se pedem neste nível.
+static func drinks(level: Dictionary) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for id in level.get("drinks", []):
+		result.append(Recipes.by_id(id))
+	return result
+
+
 static func dishes(level: Dictionary) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for id in level["dishes"]:

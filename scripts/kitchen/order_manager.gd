@@ -34,6 +34,12 @@ var spawn_every := SPAWN_EVERY
 
 ## Pratos que os clientes deste restaurante pedem.
 var menu: Array[Dictionary] = Recipes.ALL.slice(0, 2)
+## Bebidas do bar deste restaurante.
+var drinks: Array[Dictionary] = []
+## Dificuldade: multiplicador da paciência dos clientes.
+var patience_scale := 1.0
+## Pontos pagos por pratos entregues a mesas que se foram embora antes do fim.
+var partial_paid := 0
 var _spawn := SPAWN_EVERY - FIRST_SPAWN
 var _next_id := 1
 
@@ -85,6 +91,11 @@ func spawn_group(order: Array) -> bool:
 	free = free.filter(func(t: TableStation): return t.capacity() == smallest)
 	var table: TableStation = free.pick_random()
 	var customer := Customer.new(table, order, kitchen)
+	customer.patience_scale = patience_scale
+	if not drinks.is_empty() and not scripted:
+		for i in order.size():
+			if randf() < 0.55:
+				customer.drinks.append(drinks.pick_random())
 	customer.id = _next_id
 	_next_id += 1
 	table.customer = customer
@@ -107,9 +118,14 @@ func charge(customer: Customer) -> void:
 
 
 func _fail(customer: Customer) -> void:
-	score = maxi(score - FAIL_PENALTY, 0)
-	failed_count += 1
 	var at := kitchen.register_center() if queue.has(customer) else kitchen.cell_center(customer.table.cell)
+	# O que já estava na mesa paga-se na mesma (sem gorjeta), e a multa é menor.
+	var part := customer.delivered_points() if customer.is_waiting() else 0
+	score = maxi(score - FAIL_PENALTY + part, 0)
+	if part > 0:
+		partial_paid += part
+		paid.emit(part, at + Vector2(0, -12))
+	failed_count += 1
 	failed.emit(at)
 	if queue.has(customer):
 		_leave_queue(customer)

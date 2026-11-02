@@ -10,6 +10,7 @@ var _pads_label: Label
 var _room_label: Label
 ## Último valor de move.x de cada fonte, para detetar o toque em esquerda/direita.
 var _last_x := {}
+var _last_y := {}
 
 
 func _ready() -> void:
@@ -38,7 +39,7 @@ func _ready() -> void:
 		_slots.append(slot)
 
 	# Legendas com os botões desenhados como no comando (ou teclado).
-	var help := PromptBar.new([[&"pick", "Entrar"], [&"move", "Trocar de chef"], [&"dash", "Sair"], [&"pause", "Começar"]])
+	var help := PromptBar.new([[&"pick", "Entrar"], [&"move", "Chef (⇆) e papel (⇅)"], [&"dash", "Sair"], [&"pause", "Começar"]])
 	help.custom_minimum_size = Vector2(1280, 44)
 	root.add_child(help)
 	var help2 := UiStyle.label("Sem ninguém no lobby, Começar volta ao menu.", 18, UiStyle.MUTED, 4)
@@ -52,6 +53,7 @@ func _ready() -> void:
 	for source in DeviceManager.all_sources():
 		source.poll()
 		_last_x[source] = source.move.x
+		_last_y[source] = source.move.y
 	PlayerRegistry.players_changed.connect(_refresh)
 	DeviceManager.sources_changed.connect(_refresh)
 	_refresh()
@@ -65,6 +67,12 @@ func _process(_delta: float) -> void:
 		var x := source.move.x
 		var last: float = _last_x.get(source, 0.0)
 		_last_x[source] = x
+		var y := source.move.y
+		var last_y: float = _last_y.get(source, 0.0)
+		_last_y[source] = y
+		if joined and absf(y) > 0.5 and absf(last_y) <= 0.5:
+			PlayerRegistry.cycle_role(source, 1 if y > 0.0 else -1)
+			Sfx.play("ui_move")
 		if joined and absf(x) > 0.5 and absf(last) <= 0.5:
 			var dir := 1 if x > 0.0 else -1
 			PlayerRegistry.cycle_character(source, dir)

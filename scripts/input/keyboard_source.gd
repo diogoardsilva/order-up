@@ -34,7 +34,7 @@ func get_label() -> String:
 
 
 func prompt(action: StringName) -> String:
-	var name := OS.get_keycode_string(LAYOUTS[layout][String(action)])
+	var name := OS.get_keycode_string(Controls.keys[layout][action])
 	return KEY_NAMES_PT.get(name, name)
 
 
@@ -50,4 +50,4 @@ func _read_move() -> Vector2:
 
 
 func _read_action(action: StringName) -> bool:
-	return _key(String(action))
+	return Input.is_physical_key_pressed(Controls.keys[layout][action])

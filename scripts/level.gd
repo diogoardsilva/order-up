@@ -5,13 +5,16 @@ extends Node2D
 ## O mundo é pixel art a 640x360 desenhado a 2x; a HUD é desenhada a 1280x720.
 
 const ROUND_TIME := 180.0
+## Duração desta ronda (depende da dificuldade).
+var _round_time := ROUND_TIME
 const KITCHEN_OFFSET := Vector2(80, 44)
 const WORLD_SCALE := 2.0
 ## Frames de física entre envios (60 / 3 = 20 por segundo).
 const NET_SEND_EVERY := 3
 ## Lugar do primeiro ajudante (os jogadores são 0 a 3; os ajudantes 4 e 5).
 const HELPER_SLOT := 4
-const HELPER_COLORS: Array[Color] = [Color("9aa4b4"), Color("b49a7a")]
+const HELPER_COLORS: Array[Color] = [Color("9aa4b4"), Color("b49a7a"), Color("8fb39a"), Color("b48fae"),
+	Color("a9a37a"), Color("7aa3b4"), Color("b4867a"), Color("8a8fb4")]
 
 var _orders: OrderManager
 var _level: Dictionary
@@ -21,6 +24,7 @@ var _kitchen: Kitchen
 var _hud: Control
 var _time_left := ROUND_TIME
 var _finished := false
+var _pause_menu: PauseMenu
 var _tutorial: Tutorial
 var _tutorial_step := -1
 var _cards := {}  # cartão da coluna da esquerda -> posição animada
@@ -59,6 +63,12 @@ func _ready() -> void:
 		GameState.level = 0
 	_level = Levels.get_level(GameState.level)
 	_orders.menu = Levels.dishes(_level)
+	_orders.drinks = Levels.drinks(_level)
+	var diff := GameState.difficulty_values()
+	_orders.patience_scale = diff["patience"]
+	_orders.spawn_every = OrderManager.SPAWN_EVERY * diff["spawn"]
+	_round_time = diff["minutes"] * 60.0
+	_time_left = _round_time
 	_endless = GameState.endless and not _orders.scripted
 	_orders.closed = _endless
 	add_child(_orders)
@@ -110,6 +120,17 @@ func _ready() -> void:
 	_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud.draw.connect(_draw_hud)
 	layer.add_child(_hud)
+
+	var pause_layer := CanvasLayer.new()
+	pause_layer.layer = 10
+	add_child(pause_layer)
+	_pause_menu = PauseMenu.new()
+	pause_layer.add_child(_pause_menu)
+	_pause_menu.resumed.connect(_on_resume)
+	_pause_menu.to_lobby.connect(_back_to_lobby)
+	_pause_menu.to_menu.connect(func():
+		Net.leave()
+		Transition.go("res://scenes/main_menu.tscn"))
 
 	if _orders.scripted:
 		_tutorial = Tutorial.new(_kitchen, _orders)
@@ -165,7 +186,8 @@ func _process(delta: float) -> void:
 		if _open and not _finished:
 			_open_time += delta
 			# Cada vez mais clientes: de 15 em 15 segundos até um grupo a cada 6.
-			_orders.spawn_every = maxf(6.0, OrderManager.SPAWN_EVERY - _open_time / 40.0)
+			var base: float = OrderManager.SPAWN_EVERY * GameState.difficulty_values()["spawn"]
+			_orders.spawn_every = maxf(base * 0.4, base - _open_time / 40.0)
 			if _closing and _orders.customers.is_empty() and Net.is_host():
 				_finish()
 	elif not _finished and Net.is_host():
@@ -210,7 +232,7 @@ func _process(delta: float) -> void:
 		# Dia e noite a passar devagar (um ciclo a cada 6 minutos).
 		_kitchen.evening = 0.2 + 0.75 * (0.5 - 0.5 * cos(_open_time / 360.0 * TAU))
 	else:
-		_kitchen.evening = 0.15 + 0.85 * (1.0 - _time_left / ROUND_TIME) if not _tutorial else 0.3
+		_kitchen.evening = 0.15 + 0.85 * (1.0 - _time_left / _round_time) if not _tutorial else 0.3
 	_hud.queue_redraw()
 
 
@@ -235,7 +257,9 @@ func _finish() -> void:
 func _stars() -> int:
 	if _endless:
 		return 0
-	return _level["stars"].filter(func(s): return _orders.score >= s).size()
+	# As estrelas pedem mais pontos em rondas mais compridas.
+	var scale := _round_time / ROUND_TIME
+	return _level["stars"].filter(func(s): return _orders.score >= s * scale).size()
 
 
 func _draw_hud() -> void:
@@ -326,7 +350,7 @@ func _draw_tickets() -> void:
 	for order in _orders.orders:
 		var id: String = order["recipe"]["id"]
 		counts[id] = counts.get(id, 0) + 1
-	var dishes: Array = _orders.menu.filter(func(r): return counts.has(r["id"]))
+	var dishes: Array = (_orders.menu + _orders.drinks).filter(func(r): return counts.has(r["id"]))
 	if not dishes.is_empty():
 		y = _hud_header(Vector2(x, y), w, "Para cozinhar")
 	for recipe in dishes:
@@ -337,13 +361,13 @@ func _draw_tickets() -> void:
 		var pulse: float = _dish_pulse.get(id, 0.0)
 		var hint: String = recipe["hint"]
 		var hint_h := font.get_multiline_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, w - 14, 13, 3).y
-		var raw := _raw_ingredients(recipe)
-		var rect := Rect2(_card("d" + id, Vector2(x, y)), Vector2(w, 40 + hint_h + 36))
+		var raw := _raw_ingredients(recipe) if not recipe.get("drink", false) else []
+		var raw_h := 36.0 if not raw.is_empty() else 0.0
+		var rect := Rect2(_card("d" + id, Vector2(x, y)), Vector2(w, 40 + hint_h + raw_h))
 		if pulse > 0.0:
 			_hud.draw_rect(rect.grow(2 + pulse * 3), Color(UiStyle.GOLD, pulse))
 		_hud.draw_style_box(UiStyle.paper_box(), rect)
-		var plate := Item.plate()
-		plate.contents.assign(recipe["needs"])
+		var plate := Item.for_recipe(recipe)
 		_hud.draw_set_transform(rect.position + Vector2(20, 18), 0.0, Vector2(2, 2))
 		ItemArt.draw_item(_hud, plate, Vector2.ZERO)
 		_hud.draw_set_transform(Vector2.ZERO)
@@ -364,7 +388,7 @@ func _draw_tickets() -> void:
 			_hud.draw_set_transform(Vector2.ZERO)
 			var raw_name: String = Levels.SINGULAR.get(raw[k], Levels.INGREDIENT_NAMES.get(raw[k], raw[k]))
 			_hud.draw_string(font, at + Vector2(-cell_w / 2.0, 20), raw_name, HORIZONTAL_ALIGNMENT_CENTER, cell_w, _fit_size(raw_name, cell_w - 2, 13, 10), UiStyle.INK)
-		_hud.draw_multiline_string(font, rect.position + Vector2(8, 49 + 36), hint,
+		_hud.draw_multiline_string(font, rect.position + Vector2(8, 49 + raw_h), hint,
 			HORIZONTAL_ALIGNMENT_LEFT, w - 14, 13, 3, UiStyle.INK_SOFT)
 		y += rect.size.y + 6
 	for id in _dish_pulse.keys():
@@ -395,8 +419,7 @@ func _draw_tickets() -> void:
 			var missing := customer.missing()
 			var step := minf(25.0, (w - 70.0) / maxf(missing.size() - 1, 1))
 			for k in missing.size():
-				var plate := Item.plate()
-				plate.contents.assign(missing[k]["needs"])
+				var plate := Item.for_recipe(missing[k])
 				_hud.draw_set_transform(rect.position + Vector2(58 + k * step, 19), 0.0, Vector2(1.5, 1.5))
 				ItemArt.draw_item(_hud, plate, Vector2.ZERO)
 				_hud.draw_set_transform(Vector2.ZERO)
@@ -667,7 +690,11 @@ func _fit_size(text: String, width: float, size: int, min_size: int) -> int:
 ## para caberem 4 jogadores e 2 ajudantes).
 func _draw_players() -> void:
 	var y := 150.0 if not _tutorial else 10.0
-	var h := 112.0 if _kitchen.chefs.size() <= 4 else 86.0
+	var n := _kitchen.chefs.size()
+	var h := 112.0 if n <= 4 else (86.0 if n <= 6 else (546.0 - 4.0 * (n - 1)) / n)
+	if h < 60.0:
+		_draw_players_compact(y)
+		return
 	for chef in _kitchen.chefs:
 		var rect := Rect2(1130, y, 140, h)
 		_hud.draw_style_box(UiStyle.panel_box(), rect)
@@ -682,6 +709,25 @@ func _draw_players() -> void:
 		_hud.draw_string(UiStyle.FONT, rect.position + Vector2(0, h - 8), label,
 			HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 16, chef.color.darkened(0.35))
 		y += h + 8
+
+
+## Muitos chefs (com ajudantes): linhas pequenas com a cara e o nome.
+func _draw_players_compact(y: float) -> void:
+	var n := _kitchen.chefs.size()
+	var h := minf(56.0, (712.0 - y) / n - 3.0)
+	for chef in _kitchen.chefs:
+		var rect := Rect2(1130, y, 140, h)
+		_hud.draw_style_box(UiStyle.paper_box(), rect)
+		var s := clampf(h / 22.0, 1.4, 2.2)
+		var bob := roundf(sin(_clock * 3.0 + chef.slot) * 1.0)
+		_hud.draw_set_transform(rect.position + Vector2(6, 2 + bob), 0.0, Vector2(s, s))
+		Art.frame(_hud, Art.CHEFS[chef.character], Art.CHEF_FRAME, 0, 0, Vector2.ZERO, false, Color.WHITE)
+		Art.frame(_hud, Art.CHEF_TINT, Art.CHEF_FRAME, 0, 0, Vector2.ZERO, false, chef.color)
+		_hud.draw_set_transform(Vector2.ZERO)
+		var label := _helper_name(chef.slot) if chef.slot >= HELPER_SLOT else "P%d %s" % [chef.slot + 1, Art.CHEF_NAMES[chef.character]]
+		_hud.draw_string(UiStyle.FONT, rect.position + Vector2(44, h / 2.0 + 6), label, HORIZONTAL_ALIGNMENT_LEFT, 92,
+			_fit_size(label, 92, 17, 11), chef.color.darkened(0.45))
+		y += h + 3
 
 
 func _draw_results() -> void:
@@ -809,8 +855,27 @@ func _rpc_throw(slot: int, pos: Vector2, dir: Vector2) -> void:
 
 
 func _on_pause() -> void:
-	if Net.is_host():
-		_back_to_lobby()
+	if _finished:
+		if Net.is_host():
+			_back_to_lobby()
+		return
+	if _pause_menu.is_open():
+		_pause_menu.close()
+		return
+	_pause_menu.open()
+	# Online o jogo não para: os chefs deste PC ficam quietos enquanto o menu está aberto.
+	if Net.online:
+		for chef in _kitchen.chefs:
+			if chef.is_local and not chef.source is BotSource:
+				chef.frozen = true
+
+
+func _on_resume() -> void:
+	if _finished:
+		return
+	for chef in _kitchen.chefs:
+		if chef.is_local and not chef.source is BotSource:
+			chef.frozen = false
 
 
 ## Um jogador saiu da sala: o chef dele desaparece.
@@ -822,26 +887,48 @@ func _add_helper(index: int, preset: int) -> void:
 	var chef := Chef.new()
 	chef.slot = HELPER_SLOT + index
 	chef.color = HELPER_COLORS[index]
-	chef.character = [2, 4, 5, 3][role]
+	chef.character = [2, 4, 5, 3, 1, 0][role]
 	chef.kitchen = _kitchen
 	# Começa no sítio do trabalho dele (o segundo um pouco ao lado).
 	var start: Vector2i = {
 		HelperAI.Role.WAITER: Vector2i(15, 5), HelperAI.Role.HOST: Vector2i(17, 7), HelperAI.Role.RUNNER: Vector2i(12, 6),
+		HelperAI.Role.PREP: Vector2i(5, 5), HelperAI.Role.BARMAN: Vector2i(18, 5),
 	}.get(role, [Vector2i(9, 5), Vector2i(9, 2), Vector2i(9, 10)][zone])
-	chef.position = _kitchen.cell_center(start + Vector2i(index, 0))
+	chef.position = _kitchen.cell_center(_free_cell_near(start))
 	chef.is_local = not Net.is_client()
 	var brain := HelperAI.new(role as HelperAI.Role, chef, _kitchen, _orders, zone as HelperAI.Zone)
 	chef.source = BotSource.new(brain)
+	# Os ajudantes passam por entre os outros chefs (e os jogadores por entre
+	# eles): nunca ficam encravados frente a frente num corredor.
+	chef.collision_layer = 2
+	chef.collision_mask = 1
 	chef.interact_requested.connect(_on_interact.bind(chef))
 	chef.throw_requested.connect(_on_throw.bind(chef))
 	_kitchen.add_child(chef)
 	_kitchen.chefs.append(chef)
 
 
+## Célula de chão livre mais perto (sem outro chef em cima).
+func _free_cell_near(start: Vector2i) -> Vector2i:
+	var taken := _kitchen.chefs.map(func(c): return _kitchen.cell_at(c.position))
+	for radius in 8:
+		for dy in range(-radius, radius + 1):
+			for dx in range(-radius, radius + 1):
+				if maxi(absi(dx), absi(dy)) != radius:
+					continue
+				var c := start + Vector2i(dx, dy)
+				if c.y < 0 or c.y >= Kitchen.LAYOUT.size() or c.x < 0 or c.x >= Kitchen.LAYOUT[0].length():
+					continue
+				var ch := Kitchen.LAYOUT[c.y][c.x]
+				if (ch == "." or ch.is_valid_int()) and not taken.has(c):
+					return c
+	return start
+
+
 ## Nome curto do ajudante para o retrato.
 func _helper_name(slot: int) -> String:
 	var preset: int = GameState.helpers[slot - HELPER_SLOT]
-	return ["Empregado", "Cozinheiro", "Host", "Corredor"][GameState.HELPER_PRESETS[preset][1]]
+	return ["Empregado", "Cozinheiro", "Host", "Corredor", "Aj. cozinha", "Barman"][GameState.HELPER_PRESETS[preset][1]]
 
 
 func _on_players_changed() -> void:

@@ -14,6 +14,12 @@ static func draw_item(ci: CanvasItem, item: Item, at: Vector2) -> void:
 	if not item.is_plate():
 		draw_content(ci, item.content_id(), at)
 		return
+	if item.is_glass():
+		if item.second:
+			draw_item(ci, item.second, at + Vector2(-5, 3))
+			at += Vector2(4, -2)
+		draw_glass(ci, item.contents[0] if not item.contents.is_empty() else "", at)
+		return
 	if item.second:
 		# Segundo prato com comida, ao lado.
 		draw_item(ci, item.second, at + Vector2(-5, 3))
@@ -58,7 +64,40 @@ static func _draw_cookware(ci: CanvasItem, item: Item, at: Vector2) -> void:
 			ci.draw_circle(at, 6.0, Color("1e1a1a"))
 
 
+## Copo de vidro com a bebida, um reflexo e (no vinho) pé.
+static func draw_glass(ci: CanvasItem, drink: String, at: Vector2) -> void:
+	var c: Color = Recipes.DRINK_COLORS.get(drink, Color("bfe3f2"))
+	var ink := Color("3b2027")
+	at = at.round()
+	if drink == "wine":
+		ci.draw_rect(Rect2(at + Vector2(-3, -6), Vector2(7, 6)), ink)
+		ci.draw_rect(Rect2(at + Vector2(-2, -5), Vector2(5, 4)), Color("e8f4fa"))
+		ci.draw_rect(Rect2(at + Vector2(-2, -3), Vector2(5, 2)), c)
+		ci.draw_rect(Rect2(at + Vector2(0, 0), Vector2(1, 3)), ink)
+		ci.draw_rect(Rect2(at + Vector2(-2, 3), Vector2(5, 1)), ink)
+		return
+	if drink == "coffee" or drink == "tea":
+		# Chávena com pires.
+		ci.draw_rect(Rect2(at + Vector2(-5, 2), Vector2(11, 2)), ink)
+		ci.draw_rect(Rect2(at + Vector2(-4, 2), Vector2(9, 1)), Color("f4f0e8"))
+		ci.draw_rect(Rect2(at + Vector2(-3, -3), Vector2(7, 6)), ink)
+		ci.draw_rect(Rect2(at + Vector2(-2, -2), Vector2(5, 4)), Color("f4f0e8"))
+		ci.draw_rect(Rect2(at + Vector2(-2, -2), Vector2(5, 1)), c)
+		ci.draw_rect(Rect2(at + Vector2(4, -1), Vector2(2, 2)), ink)
+		return
+	ci.draw_rect(Rect2(at + Vector2(-3, -5), Vector2(7, 10)), ink)
+	ci.draw_rect(Rect2(at + Vector2(-2, -4), Vector2(5, 8)), Color("e8f4fa"))
+	ci.draw_rect(Rect2(at + Vector2(-2, -2), Vector2(5, 6)), c)
+	ci.draw_rect(Rect2(at + Vector2(-2, -2), Vector2(5, 1)), c.lightened(0.35))
+	ci.draw_rect(Rect2(at + Vector2(-2, -4), Vector2(1, 6)), Color(1, 1, 1, 0.6))
+	if drink == "shake" or drink == "soda":
+		ci.draw_rect(Rect2(at + Vector2(1, -8), Vector2(1, 5)), Color("e8574d"))
+
+
 static func draw_content(ci: CanvasItem, id: String, at: Vector2) -> void:
+	if Recipes.is_drink(id):
+		draw_glass(ci, id, at)
+		return
 	var tex := Art.food(id)
 	if tex:
 		Art.centered(ci, tex, at)

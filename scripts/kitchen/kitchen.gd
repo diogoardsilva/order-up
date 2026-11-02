@@ -73,6 +73,7 @@ var _station_seen := {}  # célula -> [o que lá está, momento da mudança]
 var _bell_time := -10.0  # campainha do passe a abanar
 var _register_time := -10.0  # gaveta da caixa aberta
 var _door_time := -10.0  # porta a abrir
+var _bar_count := 0
 var _time := 0.0
 ## Sem sons (o restaurante a funcionar por trás do menu).
 var quiet := false
@@ -157,7 +158,15 @@ func _make_layers() -> void:
 	mul.blend_mode = CanvasItemMaterial.BLEND_MODE_MUL
 	_ambient.material = mul
 	_ambient.draw.connect(func():
-		_ambient.draw_rect(Rect2(Vector2(-400, -400), pixel_size() + Vector2(800, 800)), _ambient_color()))
+		# A cozinha tem luz branca de trabalho: escurece muito menos que o salão.
+		var c := _ambient_color()
+		var k := Rect2(Vector2(TILE, TILE), Vector2((DINING_FROM_X - 1) * TILE, pixel_size().y - 2 * TILE))
+		var all := Rect2(Vector2(-400, -400), pixel_size() + Vector2(800, 800))
+		_ambient.draw_rect(Rect2(all.position, Vector2(k.position.x - all.position.x, all.size.y)), c)
+		_ambient.draw_rect(Rect2(Vector2(k.end.x, all.position.y), Vector2(all.end.x - k.end.x, all.size.y)), c)
+		_ambient.draw_rect(Rect2(Vector2(k.position.x, all.position.y), Vector2(k.size.x, k.position.y - all.position.y)), c)
+		_ambient.draw_rect(Rect2(Vector2(k.position.x, k.end.y), Vector2(k.size.x, all.end.y - k.end.y)), c)
+		_ambient.draw_rect(k, c.lerp(Color(1, 1, 1), 0.85)))
 	add_child(_ambient)
 	_lights = Node2D.new()
 	_lights.z_index = 50
@@ -218,11 +227,15 @@ func _collect_lights() -> void:
 		var lamp_center := (center + Vector2(0, -float(table.cells.size() - 1) * 12.0))
 		_light_list.append({"pos": center + Vector2(lamp_sway(lamp_center) * 1.5, 0), "radius": radius, "color": Color(warm, energy), "cast": true})
 	_light_list.append({"pos": cell_center(register.cell), "radius": 30.0 if not rich else 40.0, "color": Color(warm, 0.14 if not rich else 0.2), "cast": rich})
-	if rich:
+	if true:
 		# Luzes do teto da cozinha, brancas e fortes, para se ver bem o que se cozinha.
 		var white := Color(1.0, 0.95, 0.85)
-		for at in [Vector2(132, 66), Vector2(132, 246), Vector2(60, 156), Vector2(204, 156)]:
-			_light_list.append({"pos": at, "radius": 88.0, "color": Color(white, 0.08 + 0.07 * night), "cast": true})
+		var w := (DINING_FROM_X - 1) * TILE
+		var h := pixel_size().y
+		for fx in [0.22, 0.5, 0.78]:
+			for fy in [0.2, 0.5, 0.8]:
+				var at := Vector2(TILE + w * fx, h * fy)
+				_light_list.append({"pos": at, "radius": 96.0, "color": Color(white, (0.12 + 0.08 * night) if rich else 0.1), "cast": rich and fx == 0.5 and fy != 0.5})
 	for station: Station in stations.values():
 		if station is StoveStation and (station as StoveStation).state in [StoveStation.State.COOKING, StoveStation.State.READY]:
 			_light_list.append({"pos": cell_center(station.cell), "radius": 22.0 if not rich else 34.0, "color": Color(1.0, 0.45, 0.15, (0.22 if not rich else 0.32) * flicker), "cast": rich})
@@ -914,6 +927,8 @@ func _draw_station(station: Station) -> void:
 		draw_texture(Art.REGISTER, rect.position)
 	elif station is PassStation:
 		_draw_pass(station as PassStation, rect)
+	elif station is BarStation:
+		_draw_bar(station as BarStation, rect)
 	elif not station is TrashStation:
 		draw_texture(Art.COUNTER, rect.position)
 
@@ -927,8 +942,12 @@ func _draw_station(station: Station) -> void:
 	elif station is StoveStation:
 		_draw_stove(station as StoveStation, rect)
 	elif station is PlateStation:
-		for i in (station as PlateStation).count:
+		# Pilha de pratos (até 5 à vista; o número diz quantos há).
+		var count := (station as PlateStation).count
+		for i in mini(count, 5):
 			Art.centered(self, Art.PLATE, center - Vector2(0, i * 2))
+		if count > 5:
+			draw_string(UiStyle.FONT, rect.position + Vector2(1, 23), "%d" % count, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, UiStyle.INK)
 	elif station is SinkStation:
 		var sink := station as SinkStation
 		draw_texture(Art.SINK, rect.position)
@@ -966,6 +985,28 @@ func _draw_station(station: Station) -> void:
 		var bar := Rect2(rect.position + Vector2(2, -6), Vector2(TILE - 4, 4))
 		draw_rect(bar, UiStyle.BG)
 		draw_rect(Rect2(bar.position + Vector2.ONE, Vector2((bar.size.x - 2) * p, bar.size.y - 2)), Color("6fcf6a"))
+
+
+## Torneira do bar na parede: balcão de madeira, máquina de inox com a cor da
+## bebida e um copo de exemplo quando está vazio.
+func _draw_bar(bar: BarStation, rect: Rect2) -> void:
+	_draw_wall(bar.cell, rect)
+	var c: Color = Recipes.DRINK_COLORS.get(bar.drink, Color.WHITE)
+	var body := Rect2(rect.position + Vector2(3, 1), Vector2(18, 18))
+	draw_rect(body.grow(1), UiStyle.INK)
+	draw_rect(body, Color("8d6a4a"))
+	draw_rect(Rect2(body.position, Vector2(body.size.x, 3)), Color("b48a5e"))
+	var machine := Rect2(rect.position + Vector2(6, -6), Vector2(12, 12))
+	draw_rect(machine.grow(1), UiStyle.INK)
+	draw_rect(machine, Color("b8bec8"))
+	draw_rect(Rect2(machine.position + Vector2(2, 2), Vector2(8, 4)), c)
+	draw_rect(Rect2(machine.position + Vector2(2, 2), Vector2(8, 1)), c.lightened(0.4))
+	draw_rect(Rect2(machine.position + Vector2(5, 9), Vector2(2, 4)), Color("4a4352"))
+	if bar.progress() > 0.0:
+		# A cair um fio da bebida.
+		draw_rect(Rect2(machine.position + Vector2(5.5, 13), Vector2(1, 3)), c)
+	if bar.item == null:
+		draw_rect(Rect2(rect.position + Vector2(9, 12), Vector2(6, 1)), Color(1, 1, 1, 0.25))
 
 
 ## Passe: bancada com tampo de inox, campainha no do meio e, quando lá está
@@ -1021,7 +1062,8 @@ func _draw_table(table: TableStation, rect: Rect2) -> void:
 	draw_string(UiStyle.FONT, rect.position + Vector2(3, 10), "%d" % table.number,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color("a02530"))
 	# Pratos espalhados pela mesa.
-	var spots := [Vector2(-4, -2), Vector2(4, 2), Vector2(-4, 22), Vector2(4, 26)] if big else [Vector2(-4, -2), Vector2(4, 2)]
+	var spots := [Vector2(-4, -2), Vector2(4, 2), Vector2(-4, 22), Vector2(4, 26), Vector2(5, -6), Vector2(-5, 7), Vector2(5, 17), Vector2(-5, 30)] \
+		if big else [Vector2(-4, -2), Vector2(4, 2), Vector2(5, -6), Vector2(-5, 6)]
 	for i in table.items.size():
 		ItemArt.draw_item(self, table.items[i], rect.get_center() + Vector2(0, -3) + spots[i % spots.size()])
 
@@ -1086,8 +1128,7 @@ func _draw_customer(customer: Customer) -> void:
 			var w := maxf(22.0, missing.size() * 18.0 + 4.0)
 			_draw_bubble(bubble_center, w)
 			for k in missing.size():
-				var plate := Item.plate()
-				plate.contents.assign(missing[k]["needs"])
+				var plate := Item.for_recipe(missing[k])
 				ItemArt.draw_item(self, plate, bubble_center + Vector2((k - (missing.size() - 1) / 2.0) * 18.0, -1))
 			_draw_patience(customer, bubble_center)
 		Customer.State.EATING:
@@ -1164,6 +1205,10 @@ func _make_station(c: String) -> Station:
 		"X": return TrashStation.new()
 		"R": return RegisterStation.new()
 		"H": return PassStation.new()
+		"D":
+			var drinks: Array = level.get("drinks", ["water"])
+			_bar_count += 1
+			return BarStation.new(drinks[(_bar_count - 1) % drinks.size()])
 		_: return Station.new()
 
 

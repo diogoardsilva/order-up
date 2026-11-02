@@ -74,6 +74,12 @@ func _draw() -> void:
 
 	if joined:
 		draw_string(font, Vector2(rect.position.x, 120), Art.CHEF_NAMES[character], HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 34, UiStyle.INK)
+		# Papel escolhido (cima/baixo).
+		var role: int = _player.get("role", 0)
+		var role_rect := Rect2(Vector2(rect.position.x + 20, 132), Vector2(rect.size.x - 40, 28))
+		draw_rect(role_rect, Color(UiStyle.INK, 0.12))
+		draw_string(font, role_rect.position + Vector2(0, 21), "▲ %s ▼" % GameState.PLAYER_ROLES[role][0], HORIZONTAL_ALIGNMENT_CENTER, role_rect.size.x,
+			_role_size(GameState.PLAYER_ROLES[role][0], role_rect.size.x), UiStyle.INK_SOFT)
 		# Setas para trocar de personagem, a mexer-se ligeiramente.
 		var wiggle := sin(_time * 4.0) * 3.0
 		for dir in [-1, 1]:
@@ -95,3 +101,10 @@ func _draw() -> void:
 		Glyphs.draw(self, src, &"pick", Vector2(rect.get_center().x - Glyphs.width(src, &"pick", h) / 2.0, 128), h, pressed)
 		draw_string(font, Vector2(rect.position.x, 176), "para entrar", HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 24, Color(UiStyle.INK, 0.4 + 0.6 * a))
 	draw_set_transform(Vector2.ZERO)
+
+
+func _role_size(text: String, width: float) -> int:
+	var size := 20
+	while size > 12 and UiStyle.FONT.get_string_size("▲ %s ▼" % text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > width - 6:
+		size -= 1
+	return size

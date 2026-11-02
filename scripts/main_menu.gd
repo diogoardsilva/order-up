@@ -18,6 +18,7 @@ var _sign: Control
 var _main_box: VBoxContainer
 var _options_box: VBoxContainer
 var _graphics_box: GraphicsMenu
+var _controls_box: ControlsMenu
 var _column: VBoxContainer
 var _join_box: HBoxContainer
 var _ip_edit: LineEdit
@@ -91,6 +92,11 @@ func _ready() -> void:
 	_graphics_box.hide()
 	_graphics_box.closed.connect(_hide_graphics)
 	add_child(_graphics_box)
+	_controls_box = ControlsMenu.new()
+	_controls_box.position = Vector2(50, 40)
+	_controls_box.hide()
+	_controls_box.closed.connect(_hide_controls)
+	add_child(_controls_box)
 
 	_status = UiStyle.label(GameState.menu_message, 22, UiStyle.GOLD, 6)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -159,67 +165,15 @@ func _build_options() -> VBoxContainer:
 		_refresh_options(), 310)
 	inner.add_child(_fullscreen_button)
 	inner.add_child(UiStyle.button("Gráficos...", _show_graphics, 310))
-	inner.add_child(_volume_row("Música", GameState.music_volume, func(v): GameState.set_volumes(v, GameState.sfx_volume)))
-	inner.add_child(_volume_row("Efeitos", GameState.sfx_volume, func(v):
+	inner.add_child(UiStyle.button("Comandos...", _show_controls, 310))
+	inner.add_child(UiStyle.volume_row("Música", GameState.music_volume, func(v): GameState.set_volumes(v, GameState.sfx_volume)))
+	inner.add_child(UiStyle.volume_row("Efeitos", GameState.sfx_volume, func(v):
 		GameState.set_volumes(GameState.music_volume, v)
 		Sfx.play("pickup")))
 	inner.add_child(UiStyle.label("Também podes usar F11 ou Alt+Enter.", 18, UiStyle.INK_SOFT))
 	box.add_child(UiStyle.button("Voltar", _hide_options, 360))
 	_refresh_options()
 	return box
-
-
-func _volume_row(text: String, value: float, on_change: Callable) -> Control:
-	# A linha fica com fundo e moldura dourada quando o slider tem o foco (comando/teclado).
-	var holder := PanelContainer.new()
-	var idle := StyleBoxFlat.new()
-	idle.bg_color = Color(0, 0, 0, 0)
-	idle.set_content_margin_all(6)
-	idle.set_border_width_all(3)
-	idle.border_color = Color(0, 0, 0, 0)
-	var focused := idle.duplicate() as StyleBoxFlat
-	focused.bg_color = Color(UiStyle.GOLD, 0.25)
-	focused.border_color = UiStyle.GOLD
-	focused.set_corner_radius_all(4)
-	holder.add_theme_stylebox_override("panel", idle)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	holder.add_child(row)
-	var label := UiStyle.label(text, 24, UiStyle.INK)
-	label.custom_minimum_size.x = 110
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	row.add_child(label)
-	var slider := HSlider.new()
-	slider.min_value = 0.0
-	slider.max_value = 1.0
-	slider.step = 0.1
-	slider.value = value
-	slider.custom_minimum_size = Vector2(200, 32)
-	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	slider.add_theme_icon_override("grabber", Art.COIN)
-	slider.add_theme_icon_override("grabber_highlight", Art.COIN)
-	var track := StyleBoxFlat.new()
-	track.bg_color = UiStyle.INK
-	track.content_margin_top = 4
-	track.content_margin_bottom = 4
-	slider.add_theme_stylebox_override("slider", track)
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = UiStyle.GOLD
-	fill.content_margin_top = 4
-	fill.content_margin_bottom = 4
-	slider.add_theme_stylebox_override("grabber_area", fill)
-	slider.add_theme_stylebox_override("grabber_area_highlight", fill)
-	slider.value_changed.connect(on_change)
-	slider.focus_entered.connect(func():
-		Sfx.play("ui_move")
-		holder.add_theme_stylebox_override("panel", focused)
-		label.text = "> " + text)
-	slider.focus_exited.connect(func():
-		holder.add_theme_stylebox_override("panel", idle)
-		label.text = text)
-	slider.mouse_entered.connect(slider.grab_focus)
-	row.add_child(slider)
-	return holder
 
 
 func _refresh_options() -> void:
@@ -241,6 +195,21 @@ func _show_graphics() -> void:
 	_pop(_graphics_box)
 
 
+func _show_controls() -> void:
+	_column.hide()
+	_sign.hide()
+	_controls_box.show()
+	_controls_box.focus_first()
+	_pop(_controls_box)
+
+
+func _hide_controls() -> void:
+	_controls_box.hide()
+	_column.show()
+	_sign.show()
+	_fullscreen_button.grab_focus()
+
+
 func _hide_graphics() -> void:
 	_graphics_box.hide()
 	_column.show()
@@ -259,6 +228,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel") and _graphics_box.visible:
 		Sfx.play("ui_back")
 		_hide_graphics()
+	elif event.is_action_pressed("ui_cancel") and _controls_box.visible:
+		Sfx.play("ui_back")
+		_hide_controls()
 	elif event.is_action_pressed("ui_cancel") and _options_box.visible:
 		Sfx.play("ui_back")
 		_hide_options()
@@ -301,8 +273,7 @@ func _run_demo(delta: float) -> void:
 			_kitchen.show_fx(_kitchen.cell_center(customer.table.cell), "Anotado!", UiStyle.GOLD)
 			t = 0.0
 		elif customer.is_waiting() and t > DEMO_SERVE_AFTER:
-			var plate := Item.plate()
-			plate.contents.assign(customer.missing()[0]["needs"])
+			var plate := Item.for_recipe(customer.missing()[0])
 			customer.table.items.append(plate)
 			t = 0.0
 		elif not customer.is_calling() and not customer.is_waiting():

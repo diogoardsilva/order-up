@@ -23,7 +23,24 @@ const ALL: Array[Dictionary] = [
 	{"id": "pizza", "name": "Pizza", "hint": "massa + tomate e queijo cortados, forno", "needs": ["pizza"], "points": 45},
 	{"id": "spaghetti", "name": "Esparguete", "hint": "esparguete + tomate cortado, panela", "needs": ["pasta_cooked"], "points": 35},
 	{"id": "caprese", "name": "Caprese", "hint": "tomate e queijo cortados", "needs": ["tomato_chopped", "cheese_chopped"], "points": 20},
+	# Bebidas: servem-se num copo, tirado no bar (mantém "usar" na torneira).
+	{"id": "water", "name": "Água", "hint": "bar: copo de água", "needs": ["water"], "points": 8, "drink": true},
+	{"id": "juice", "name": "Sumo de laranja", "hint": "bar: sumo de laranja", "needs": ["juice"], "points": 12, "drink": true},
+	{"id": "wine", "name": "Vinho", "hint": "bar: copo de vinho", "needs": ["wine"], "points": 15, "drink": true},
+	{"id": "coffee", "name": "Café", "hint": "bar: máquina do café", "needs": ["coffee"], "points": 10, "drink": true},
+	{"id": "tea", "name": "Chá verde", "hint": "bar: chá verde", "needs": ["tea"], "points": 10, "drink": true},
+	{"id": "soda", "name": "Refrigerante", "hint": "bar: refrigerante", "needs": ["soda"], "points": 10, "drink": true},
+	{"id": "shake", "name": "Batido", "hint": "bar: batido", "needs": ["shake"], "points": 15, "drink": true},
 ]
+## Cor de cada bebida (no copo).
+const DRINK_COLORS := {
+	"water": Color("bfe3f2"), "juice": Color("f6a13a"), "wine": Color("8e1f3a"), "coffee": Color("5a3422"),
+	"tea": Color("9cc25a"), "soda": Color("3a2420"), "shake": Color("f2a7c4"),
+}
+
+
+static func is_drink(id: String) -> bool:
+	return DRINK_COLORS.has(id)
 
 ## O que se cozinha no fogão: "in" são os ingredientes (por qualquer ordem) e
 ## "out" o resultado, que se tira com um prato. "tool" muda o desenho.

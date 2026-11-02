@@ -13,11 +13,12 @@ var _shown := 0.0  # posição animada do cartão selecionado
 var _time := 0.0
 var _last_x := {}
 var _last_y := {}
-var _helper_labels: Array[Label] = []
 var _desc_label: Label
-## Linha escolhida: 0 = restaurantes, 1 = modo, 2 e 3 = ajudantes.
+## Linha escolhida: 0 = restaurantes, depois as definições (ver _rows()).
 var _row := 0
-var _mode_label: Label
+var _row_labels: Array[Label] = []
+## Quantas linhas de definições se veem de cada vez.
+const VISIBLE_ROWS := 3
 const MODE_NAMES := ["Serviço (3 minutos, com estrelas)", "Casa Aberta (sem fim)"]
 const MODE_DESC := ["Ronda de 3 minutos: façam pontos para ganhar as 3 estrelas.",
 	"Preparem a cozinha com calma, abram a porta quando quiserem e fechem quando quiserem parar."]
@@ -38,16 +39,12 @@ func _ready() -> void:
 	_cards.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_cards.draw.connect(_draw_cards)
 	add_child(_cards)
-	_mode_label = UiStyle.label("", 26, UiStyle.TEXT, 8)
-	_mode_label.position = Vector2(0, 540)
-	_mode_label.size = Vector2(1280, 36)
-	add_child(_mode_label)
-	for i in GameState.MAX_HELPERS:
+	for i in VISIBLE_ROWS:
 		var l := UiStyle.label("", 24, UiStyle.TEXT, 8)
-		l.position = Vector2(0, 574 + i * 30)
-		l.size = Vector2(1280, 36)
+		l.position = Vector2(0, 540 + i * 31)
+		l.size = Vector2(1280, 34)
 		add_child(l)
-		_helper_labels.append(l)
+		_row_labels.append(l)
 	_refresh_helper()
 	_desc_label = UiStyle.label("", 19, UiStyle.MUTED, 6)
 	_desc_label.position = Vector2(0, 634)
@@ -67,10 +64,12 @@ func _ready() -> void:
 		source.poll()
 		_last_x[source] = source.move.x
 		_last_y[source] = source.move.y
-	Net.level_choice_changed.connect(func(i: int, helpers: Array, endless: bool):
+	Net.level_choice_changed.connect(func(i: int, helpers: Array, endless: bool, settings: Array):
 		_index = i
 		GameState.helpers = helpers.duplicate()
 		GameState.endless = endless
+		GameState.difficulty = settings[0]
+		GameState.custom = settings[1].duplicate()
 		_refresh_helper()
 		Sfx.play("ui_move"))
 	Sfx.music_on()
@@ -82,21 +81,77 @@ func _help_text() -> String:
 	return "Cima / baixo: escolher a linha      Esquerda / direita: mudar      Começar: pegar      Voltar: dash"
 
 
+## As linhas de definições, por ordem: [id, nome, valor, descrição].
+func _rows() -> Array:
+	var rows := []
+	rows.append(["mode", "Modo", MODE_NAMES[1 if GameState.endless else 0], MODE_DESC[1 if GameState.endless else 0]])
+	var d: Array = GameState.DIFFICULTIES[GameState.difficulty]
+	var v := GameState.difficulty_values()
+	rows.append(["difficulty", "Dificuldade", d[0], "Paciência dos clientes x%.2g, ronda de %d min." % [v["patience"], v["minutes"]]])
+	if GameState.difficulty == GameState.DIFFICULTIES.size() - 1:
+		rows.append(["patience", "Paciência dos clientes", GameState.CUSTOM_PATIENCE[GameState.custom[0]][1], "Quanto tempo esperam para pedir e pela comida."])
+		rows.append(["spawn", "Clientes a chegar", GameState.CUSTOM_SPAWN[GameState.custom[1]][1], "De quanto em quanto tempo entra um grupo."])
+		rows.append(["time", "Duração da ronda", GameState.CUSTOM_TIME[GameState.custom[2]][1], "No modo Serviço (a Casa Aberta não tem relógio)."])
+	# Ajudantes: os escolhidos e mais um lugar vazio (até 8).
+	var shown := 0
+	for i in GameState.MAX_HELPERS:
+		var preset: int = GameState.helpers[i]
+		rows.append(["helper%d" % i, "Ajudante %d" % (i + 1), GameState.HELPER_PRESETS[preset][0], GameState.HELPER_PRESETS[preset][3]])
+		shown += 1
+		if preset == 0:
+			break
+	return rows
+
+
 func _refresh_helper() -> void:
-	var mode_name: String = MODE_NAMES[1 if GameState.endless else 0]
-	if _mode_label:
-		_mode_label.text = ("> Modo:  < %s >" if _row == 1 else "Modo:  %s") % mode_name
-		_mode_label.add_theme_color_override("font_color", UiStyle.GOLD if _row == 1 else UiStyle.TEXT)
-	for i in _helper_labels.size():
-		var name: String = GameState.HELPER_PRESETS[GameState.helpers[i]][0]
-		var focused := _row == i + 2
-		_helper_labels[i].text = ("> Ajudante %d:  < %s >" if focused else "Ajudante %d:  %s") % [i + 1, name]
-		_helper_labels[i].add_theme_color_override("font_color", UiStyle.GOLD if focused else UiStyle.TEXT)
+	var rows := _rows()
+	_row = clampi(_row, 0, rows.size())
+	# Janela de linhas à volta da escolhida.
+	var first := clampi(_row - 2, 0, maxi(rows.size() - VISIBLE_ROWS, 0))
+	for i in _row_labels.size():
+		var k := first + i
+		var l := _row_labels[i]
+		if k >= rows.size():
+			l.text = ""
+			continue
+		var focused := _row == k + 1
+		var more := ""
+		if i == 0 and first > 0:
+			more = "  ▲"
+		elif i == VISIBLE_ROWS - 1 and k < rows.size() - 1:
+			more = "  ▼"
+		l.text = ("> %s:  < %s >" if focused else "%s:  %s") % [rows[k][1], rows[k][2]] + more
+		l.add_theme_color_override("font_color", UiStyle.GOLD if focused else UiStyle.TEXT)
 	if _desc_label:
-		if _row == 1:
-			_desc_label.text = MODE_DESC[1 if GameState.endless else 0]
-		else:
-			_desc_label.text = GameState.HELPER_PRESETS[GameState.helpers[_row - 2]][3] if _row > 1 else ""
+		_desc_label.text = rows[_row - 1][3] if _row > 0 else ""
+
+
+## Esquerda/direita na linha de definições escolhida.
+func _change_row(dir: int) -> void:
+	var id: String = _rows()[_row - 1][0]
+	match id:
+		"mode":
+			GameState.set_endless(not GameState.endless)
+		"difficulty":
+			GameState.set_difficulty(posmod(GameState.difficulty + dir, GameState.DIFFICULTIES.size()), GameState.custom)
+		"patience", "spawn", "time":
+			var k := ["patience", "spawn", "time"].find(id)
+			var sizes := [GameState.CUSTOM_PATIENCE.size(), GameState.CUSTOM_SPAWN.size(), GameState.CUSTOM_TIME.size()]
+			var c := GameState.custom.duplicate()
+			c[k] = posmod(c[k] + dir, sizes[k])
+			GameState.set_difficulty(GameState.difficulty, c)
+		_:
+			var i := id.trim_prefix("helper").to_int()
+			var helpers := GameState.helpers.duplicate()
+			helpers[i] = posmod(helpers[i] + dir, GameState.HELPER_PRESETS.size())
+			# Um lugar vazio no meio puxa os de baixo para cima.
+			var kept := helpers.filter(func(h): return h != 0)
+			while kept.size() < GameState.MAX_HELPERS:
+				kept.append(0)
+			if helpers[i] != 0:
+				kept = helpers
+			GameState.set_helpers(kept)
+	_refresh_helper()
 
 
 func _can_choose(source: InputSource) -> bool:
@@ -119,29 +174,23 @@ func _process(delta: float) -> void:
 		if not _can_choose(source):
 			continue
 		if absf(y) > 0.5 and absf(last_y) <= 0.5:
-			_row = clampi(_row + (1 if y > 0.0 else -1), 0, GameState.MAX_HELPERS + 1)
+			_row = clampi(_row + (1 if y > 0.0 else -1), 0, _rows().size())
 			_refresh_helper()
 			Sfx.play("ui_move")
 		if absf(x) > 0.5 and absf(last) <= 0.5:
 			var dir := 1 if x > 0.0 else -1
 			if _row == 0:
 				_index = clampi(_index + dir, 0, Levels.ALL.size() - 1)
-			elif _row == 1:
-				GameState.set_endless(not GameState.endless)
-				_refresh_helper()
 			else:
-				var helpers := GameState.helpers.duplicate()
-				helpers[_row - 2] = posmod(helpers[_row - 2] + dir, GameState.HELPER_PRESETS.size())
-				GameState.set_helpers(helpers)
-				_refresh_helper()
+				_change_row(dir)
 			Sfx.play("ui_move")
 			if Net.online:
-				Net.set_level_choice.rpc(_index, GameState.helpers, GameState.endless)
+				Net.set_level_choice.rpc(_index, GameState.helpers, GameState.endless, [GameState.difficulty, GameState.custom])
 		elif source.just_pressed(&"pick"):
 			Sfx.play("ui_confirm")
 			GameState.level = _index
 			if Net.online:
-				Net.start_level.rpc(_index, GameState.helpers, GameState.endless)
+				Net.start_level.rpc(_index, GameState.helpers, GameState.endless, [GameState.difficulty, GameState.custom])
 			else:
 				GameState.mode = GameState.Mode.PLAY
 				Transition.go("res://scenes/level.tscn")
@@ -179,8 +228,7 @@ func _draw_cards() -> void:
 		var dishes := Levels.dishes(level)
 		for k in dishes.size():
 			var y := rect.position.y + 236 + k * 40
-			var plate := Item.plate()
-			plate.contents.assign(dishes[k]["needs"])
+			var plate := Item.for_recipe(dishes[k])
 			_cards.draw_set_transform(center + Vector2(rect.position.x + 34, y) * s, 0.0, Vector2(2, 2) * s)
 			ItemArt.draw_item(_cards, plate, Vector2.ZERO)
 			_cards.draw_set_transform(center, 0.0, Vector2(s, s))

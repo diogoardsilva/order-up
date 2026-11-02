@@ -4,6 +4,8 @@ extends RefCounted
 ## pratos vazios, ou dois pratos com comida) ou uma panela/frigideira.
 
 const PLATE := "plate"
+## Copo com uma bebida (serve-se como um prato).
+const GLASS := "glass"
 const COOKWARE := "cookware"
 ## Quantos pratos vazios se levam de uma vez.
 const MAX_STACK := 4
@@ -43,6 +45,21 @@ static func plate() -> Item:
 	return ingredient(PLATE)
 
 
+static func glass(drink: String) -> Item:
+	var item := ingredient(GLASS)
+	item.contents.assign([drink])
+	return item
+
+
+## O que se leva à mesa para esta receita (prato ou copo), já completo.
+static func for_recipe(recipe: Dictionary) -> Item:
+	if recipe.get("drink", false):
+		return glass(recipe["needs"][0])
+	var item := plate()
+	item.contents.assign(recipe["needs"])
+	return item
+
+
 static func cookware(p_tool: String) -> Item:
 	var item := ingredient(COOKWARE)
 	item.tool = p_tool
@@ -73,8 +90,13 @@ static func deserialize(data: Variant) -> Item:
 	return item
 
 
+## Pratos e copos (os dois levam-se às mesas).
 func is_plate() -> bool:
-	return kind == PLATE
+	return kind == PLATE or kind == GLASS
+
+
+func is_glass() -> bool:
+	return kind == GLASS
 
 
 func is_cookware() -> bool:
@@ -87,7 +109,7 @@ func is_ingredient() -> bool:
 
 ## Pratos vazios iguais (todos sujos ou todos limpos) que cabem numa pilha.
 func can_stack(other: Item) -> bool:
-	return other != null and is_plate() and other.is_plate() and contents.is_empty() and other.contents.is_empty() \
+	return other != null and kind == PLATE and other.kind == PLATE and contents.is_empty() and other.contents.is_empty() \
 		and second == null and dirty == other.dirty and stack + other.stack <= MAX_STACK
 
 
@@ -108,7 +130,7 @@ func can_chop() -> bool:
 
 ## Tenta pôr algo neste prato. Devolve true se coube.
 func try_add(id: String) -> bool:
-	if not is_plate() or dirty or stack > 1 or second != null or contents.any(func(c): return Recipes.SOLO.has(c)):
+	if kind != PLATE or dirty or stack > 1 or second != null or contents.any(func(c): return Recipes.SOLO.has(c)):
 		return false
 	if Recipes.SOLO.has(id):
 		if not contents.is_empty():
