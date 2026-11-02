@@ -27,6 +27,10 @@ var failed_count := 0
 var active := true
 ## No tutorial os clientes não chegam sozinhos nem perdem a paciência.
 var scripted := false
+## Casa Aberta: com a porta fechada não entra ninguém.
+var closed := false
+## Segundos entre grupos (no modo Casa Aberta vai descendo com o tempo).
+var spawn_every := SPAWN_EVERY
 
 ## Pratos que os clientes deste restaurante pedem.
 var menu: Array[Dictionary] = Recipes.ALL.slice(0, 2)
@@ -35,9 +39,9 @@ var _next_id := 1
 
 
 func _process(delta: float) -> void:
-	if active and not scripted:
+	if active and not scripted and not closed:
 		_spawn += delta
-		if _spawn >= SPAWN_EVERY and customers.size() < MAX_CUSTOMERS:
+		if _spawn >= spawn_every and customers.size() < MAX_CUSTOMERS:
 			if spawn_group(_random_order()):
 				_spawn = 0.0
 	for customer in customers.duplicate():

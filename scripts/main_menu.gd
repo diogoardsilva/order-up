@@ -105,6 +105,18 @@ func _ready() -> void:
 	info.position = Vector2(16, 690)
 	add_child(info)
 
+	# A legenda mostra o botão de "dash" para voltar (Shift no teclado).
+	var shift := InputEventKey.new()
+	shift.keycode = KEY_SHIFT
+	if not InputMap.action_has_event("ui_cancel", shift):
+		InputMap.action_add_event("ui_cancel", shift)
+	var help := PromptBar.new([[&"move", "Escolher"], [&"pick", "Confirmar"], [&"dash", "Voltar"]])
+	help.position = Vector2(860, 676)
+	help.size = Vector2(400, 40)
+	help.font_size = 18
+	help.button_height = 26
+	add_child(help)
+
 	_first_button.grab_focus()
 	_intro()
 	Sfx.music_on()

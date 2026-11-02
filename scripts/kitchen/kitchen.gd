@@ -69,12 +69,20 @@ var particles := Particles.new()
 # Para sons e animações: estado anterior de cada cliente e progresso das estações.
 var _customer_seen := {}  # id -> [estado, momento da mudança]
 var _station_progress := {}  # célula -> [progresso, tempo desde o último som]
+var _station_seen := {}  # célula -> [o que lá está, momento da mudança]
+var _bell_time := -10.0  # campainha do passe a abanar
+var _register_time := -10.0  # gaveta da caixa aberta
+var _door_time := -10.0  # porta a abrir
 var _time := 0.0
 ## Sem sons (o restaurante a funcionar por trás do menu).
 var quiet := false
 
 ## Um efeito de texto (pontos, "Anotado!"). Online, o nível reenvia-o aos outros PCs.
 signal fx(at: Vector2, text: String, color: Color, sparkle: bool)
+## Alguém carregou em pegar virado para a porta (modo Casa Aberta: abrir/fechar).
+signal door_used(chef: Chef)
+## No modo Casa Aberta a porta é um "botão" e não uma bancada.
+var door_button := false
 
 
 func _init(p_orders: OrderManager, p_level: Dictionary = Levels.ALL[0]) -> void:
@@ -115,7 +123,8 @@ func _init(p_orders: OrderManager, p_level: Dictionary = Levels.ALL[0]) -> void:
 					register = station
 				if station is PassStation:
 					(station as PassStation).plate_ready.connect(func(at: Vector2i):
-						show_fx(cell_center(at), "Pronto!", Color("f2c94c")))
+						show_fx(cell_center(at), "Pronto!", Color("f2c94c"))
+						_bell_time = _time)
 	_make_layers()
 	var number := 1
 	for table in tables():
@@ -206,7 +215,8 @@ func _collect_lights() -> void:
 		var center := (cell_center(table.cells[0]) + cell_center(table.cells.back())) / 2.0
 		var energy := (0.22 if not rich else 0.3 + 0.16 * night) * flicker
 		var radius := 56.0 if not rich else (66.0 if table.capacity() > 2 else 50.0)
-		_light_list.append({"pos": center, "radius": radius, "color": Color(warm, energy), "cast": true})
+		var lamp_center := (center + Vector2(0, -float(table.cells.size() - 1) * 12.0))
+		_light_list.append({"pos": center + Vector2(lamp_sway(lamp_center) * 1.5, 0), "radius": radius, "color": Color(warm, energy), "cast": true})
 	_light_list.append({"pos": cell_center(register.cell), "radius": 30.0 if not rich else 40.0, "color": Color(warm, 0.14 if not rich else 0.2), "cast": rich})
 	if rich:
 		# Luzes do teto da cozinha, brancas e fortes, para se ver bem o que se cozinha.
@@ -416,9 +426,20 @@ func _update_floor_shader() -> void:
 
 
 ## Candeeiro pendurado por cima de cada mesa (desenhado por cima dos clientes).
+## Quanto o candeeiro desta mesa baloiça agora (Ultra: devagarinho, como se
+## houvesse uma corrente de ar quando a porta abre).
+func lamp_sway(center: Vector2) -> float:
+	if Gfx.lighting < 3:
+		return 0.0
+	var door_push := maxf(0.0, 1.0 - (_time - _door_time) / 3.0)
+	return sin(_time * 1.3 + center.y * 0.05) * (0.8 + door_push * 1.6)
+
+
 func _draw_lamp(center: Vector2) -> void:
-	var top := (center + Vector2(0, -22)).round()
-	draw_line(top + Vector2(0, -12), top, Color(0.15, 0.08, 0.06, 0.6), 1.0)
+	var sway := lamp_sway(center)
+	var hook := (center + Vector2(0, -34)).round()
+	var top := (center + Vector2(sway, -22)).round()
+	draw_line(hook, top, Color(0.15, 0.08, 0.06, 0.6), 1.0)
 	draw_colored_polygon(PackedVector2Array([top + Vector2(-5, 4), top + Vector2(5, 4), top + Vector2(3, 0), top + Vector2(-3, 0)]), Color("2f5a4a"))
 	draw_rect(Rect2(top + Vector2(-2, 4), Vector2(4, 1)), Color("ffe6a0"))
 
@@ -469,6 +490,10 @@ func path_from_seat(table: TableStation, seat: Vector2i) -> Array[Vector2]:
 	return path
 
 
+func door_cell() -> Vector2i:
+	return _door()
+
+
 func _door() -> Vector2i:
 	for station: Station in stations.values():
 		if LAYOUT[station.cell.y][station.cell.x] == "E":
@@ -511,7 +536,7 @@ func throw_item(chef: Chef) -> void:
 	var dir := Vector2(signf(chef.facing.x), 0) if absf(chef.facing.x) > absf(chef.facing.y) else Vector2(0, signf(chef.facing.y))
 	thrown.append({"item": chef.held, "pos": chef.position + dir * 8.0, "vel": dir * THROW_SPEED, "dist": 0.0, "slot": chef.slot})
 	chef.held = null
-	_sfx("dash", -6.0, 0.2)
+	_sfx("throw", -2.0, 0.15)
 
 
 func _update_thrown(delta: float) -> void:
@@ -524,6 +549,8 @@ func _update_thrown(delta: float) -> void:
 		for chef in chefs:
 			if chef.slot != t["slot"] and chef.held == null and not chef.frozen and chef.position.distance_to(pos) < 12.0:
 				chef.held = t["item"]
+				_sfx("catch", -2.0)
+				particles.ring(pos, 10.0, Color(chef.color, 0.9))
 				thrown.erase(t)
 				break
 		if not thrown.has(t):
@@ -584,6 +611,9 @@ func interact(chef: Chef, cell: Vector2i) -> void:
 				floor_items.remove_at(i)
 			elif chef.held.is_cookware() and chef.held.cook_add(item.content_id()):
 				floor_items.remove_at(i)
+		return
+	if door_button and station and cell == _door():
+		door_used.emit(chef)
 		return
 	if station is TableStation and (station as TableStation).customer != null \
 			and (station as TableStation).customer.is_calling():
@@ -663,6 +693,7 @@ func _emit_ambient(delta: float) -> void:
 				last[1] = 0.0
 		last[0] = p
 		_station_progress[station.cell] = last
+		_watch_station(station)
 		if station is StoveStation and (station as StoveStation).state in [StoveStation.State.COOKING, StoveStation.State.READY]:
 			cooking += 1
 		var center := cell_center(station.cell)
@@ -687,8 +718,7 @@ func _emit_ambient(delta: float) -> void:
 			particles.sweat(customer.pos + Vector2(6, -14))
 		var seen: Array = _customer_seen.get(customer.id, [-1, 0.0])
 		if seen[0] != customer.state:
-			if customer.state == Customer.State.CALLING:
-				_sfx("bell", -3.0)
+			_customer_event(customer, seen[0])
 			_customer_seen[customer.id] = [customer.state, _time]
 	if Gfx.particles >= 2:
 		# Pó a flutuar nos raios de sol e vapor dos pratos acabados de servir.
@@ -701,6 +731,111 @@ func _emit_ambient(delta: float) -> void:
 				for i in table.items.size():
 					if randf() < delta * 1.2:
 						particles.steam(cell_center(table.cell) + Vector2(randf_range(-6, 6), -6 + (i / 2) * 24))
+
+
+## Cantos a pulsar à volta da estação para onde um chef está virado.
+func _draw_brackets(r: Rect2, color: Color) -> void:
+	var g := 1.0 + absf(sin(_time * 5.0)) * 1.5
+	r = r.grow(g - 1.0)
+	var l := 5.0
+	var c := Color(color, 0.95)
+	var dark := Color(UiStyle.INK, 0.6)
+	for corner in [[r.position, Vector2(1, 1)], [Vector2(r.end.x, r.position.y), Vector2(-1, 1)],
+			[Vector2(r.position.x, r.end.y), Vector2(1, -1)], [r.end, Vector2(-1, -1)]]:
+		var p: Vector2 = corner[0]
+		var d: Vector2 = corner[1]
+		for pass_i in 2:
+			var off := Vector2(0, 1) if pass_i == 0 else Vector2.ZERO
+			var col := dark if pass_i == 0 else c
+			draw_line(p + off, p + off + Vector2(d.x * l, 0), col, 2.0)
+			draw_line(p + off, p + off + Vector2(0, d.y * l), col, 2.0)
+
+
+## Sons e efeitos quando um grupo muda de fase (corre igual em todos os PCs,
+## porque olha só para o estado que chega por rede).
+func _customer_event(customer: Customer, before: int) -> void:
+	var head := cell_center(customer.table.cell) + Vector2(0, -16)
+	match customer.state:
+		Customer.State.ARRIVING:
+			if before == -1:
+				_sfx("door", -6.0, 0.03)
+				_door_time = _time
+		Customer.State.CALLING:
+			_sfx("bell", -3.0)
+		Customer.State.WAITING:
+			particles.ring(head, 14.0, Color("f2c94c"))
+		Customer.State.EATING:
+			_sfx("served", -3.0, 0.02)
+			_sfx("happy", -8.0, 0.15)
+			particles.hearts(head, 3 + customer.size())
+			particles.ring(cell_center(customer.table.cell), 18.0, Color(1, 0.8, 0.9, 0.9), 0.5)
+		Customer.State.LEAVING:
+			if customer.angry:
+				_sfx("angry", -2.0, 0.1)
+				var at := customer.members[0].pos + Vector2(0, -22) if before == Customer.State.AT_REGISTER else head
+				particles.storm(at)
+			elif before == Customer.State.AT_REGISTER:
+				_sfx("kaching", -2.0, 0.03)
+				particles.coins(register_center() + Vector2(0, -8), 7)
+				particles.ring(register_center(), 16.0, Color("f6c444"))
+				_register_time = _time
+
+
+## O que está numa estação, para se saber quando muda.
+func _station_key(station: Station) -> String:
+	var it := station.item
+	var k := "" if it == null else "%s%s%s%d%d" % [it.kind, it.chopped, it.contents, it.cook_state, it.stack]
+	if station is SinkStation:
+		k += "s%d" % (station as SinkStation).dirty
+	elif station is PlateStation:
+		k += "p%d" % (station as PlateStation).count
+	return k
+
+
+## Pequenos efeitos quando o que está numa estação muda: o item que se pousa dá
+## um pulo e uma onda, o que cai na panela salpica, a panela pronta abana a
+## tampa e a queimada faz fumo.
+func _watch_station(station: Station) -> void:
+	var key := _station_key(station)
+	var center := cell_center(station.cell) + Vector2(0, -3)
+	if not _station_seen.has(station.cell):
+		_station_seen[station.cell] = [key, -10.0, _cook_state(station)]
+		return
+	var seen: Array = _station_seen[station.cell]
+	if seen[0] == key:
+		return
+	var before_state: int = seen[2]
+	var state := _cook_state(station)
+	var appeared: bool = String(seen[0]).is_empty() and station.item != null
+	seen[0] = key
+	seen[1] = _time
+	seen[2] = state
+	if appeared:
+		particles.ring(center, 10.0, Color(1, 1, 1, 0.7), 0.3)
+	if station is StoveStation:
+		if state != before_state:
+			if state == StoveStation.State.READY:
+				_sfx("lid", -2.0)
+				particles.ring(center, 14.0, Color("6fcf6a"))
+			elif state == StoveStation.State.BURNT:
+				_sfx("burn", -2.0)
+				for i in 6:
+					particles.smoke(center + Vector2(randf_range(-6, 6), -4), true)
+		if station.item and station.item.is_cookware() and state in [StoveStation.State.FILLING, StoveStation.State.COOKING] and not appeared:
+			_sfx("splash", -6.0, 0.15)
+			particles.splash(center + Vector2(0, -3), Color("f2b07a"))
+	elif station is SinkStation and (station as SinkStation).dirty > 0:
+		particles.splash(center, Color("bfe3f2"))
+
+
+func _cook_state(station: Station) -> int:
+	return station.item.cook_state if station.item and station.item.is_cookware() else -1
+
+
+## 0 → 1 → 0: o pulo de quando se pousa uma coisa numa estação.
+func item_pop(cell: Vector2i) -> float:
+	var age: float = _time - _station_seen.get(cell, ["", -10.0])[1]
+	return 0.0 if age > 0.3 else sin(age / 0.3 * PI) * (1.0 - age / 0.3)
 
 
 func _draw() -> void:
@@ -724,10 +859,11 @@ func _draw() -> void:
 		var cell := chef.target_cell()
 		var target := station_at(cell)
 		if target is TableStation:
-			for c in (target as TableStation).cells:
-				draw_rect(Rect2(Vector2(c) * TILE, Vector2(TILE, TILE)).grow(-1), chef.color, false, 1.0)
+			var cells: Array[Vector2i] = (target as TableStation).cells
+			var r := Rect2(Vector2(cells[0]) * TILE, Vector2(TILE, TILE * cells.size()))
+			_draw_brackets(r, chef.color)
 		elif target:
-			draw_rect(Rect2(Vector2(cell) * TILE, Vector2(TILE, TILE)).grow(-1), chef.color, false, 1.0)
+			_draw_brackets(Rect2(Vector2(cell) * TILE, Vector2(TILE, TILE)), chef.color)
 	for f in floor_items:
 		draw_actor_shadow(self, f["pos"] + Vector2(0, 4), f["pos"], 4.0)
 		ItemArt.draw_item(self, f["item"], f["pos"])
@@ -735,7 +871,15 @@ func _draw() -> void:
 		# Voa num arco: a sombra fica no chão.
 		var h := sin(clampf(t["dist"] / THROW_RANGE, 0.0, 1.0) * PI) * 10.0
 		draw_actor_shadow(self, t["pos"] + Vector2(0, 4), t["pos"], 3.0)
-		ItemArt.draw_item(self, t["item"], t["pos"] - Vector2(0, h))
+		# Roda no ar, com um rasto.
+		var vel: Vector2 = t["vel"]
+		if vel != Vector2.ZERO:
+			for k in 3:
+				var back: Vector2 = t["pos"] - vel.normalized() * (k + 1) * 4.0 - Vector2(0, h)
+				draw_circle(back, 2.0 - k * 0.5, Color(1, 1, 1, 0.35 - k * 0.1))
+		draw_set_transform(t["pos"] - Vector2(0, h), t["dist"] * 0.12, Vector2.ONE)
+		ItemArt.draw_item(self, t["item"], Vector2.ZERO)
+		draw_set_transform(Vector2.ZERO)
 	for table in tables():
 		_draw_lamp((cell_center(table.cells[0]) + cell_center(table.cells.back())) / 2.0 + Vector2(0, -float(table.cells.size() - 1) * 12.0))
 	for customer in orders.customers:
@@ -755,7 +899,13 @@ func _draw_station(station: Station) -> void:
 	if station is TableStation:
 		_draw_table(station as TableStation, rect)
 	elif LAYOUT[station.cell.y][station.cell.x] == "E":
-		draw_texture(Art.DOOR, rect.position)
+		# A porta abre-se quando entra um grupo.
+		var age := _time - _door_time
+		var open := 0.0 if age > 1.4 else sin(clampf(age / 1.4, 0.0, 1.0) * PI)
+		if open > 0.0:
+			draw_rect(rect, Color("2a1a1e"))
+			draw_rect(Rect2(rect.position + Vector2(0, rect.size.y - 3), Vector2(rect.size.x, 3)), Color(1, 0.85, 0.5, 0.5 * open))
+		draw_texture_rect(Art.DOOR, Rect2(rect.position, Vector2(rect.size.x * (1.0 - open * 0.75), rect.size.y)), false)
 	elif station.cell.x >= DINING_FROM_X - 1 and station.get_script() == Station:
 		_draw_wall(station.cell, rect)
 	elif station is StoveStation:
@@ -792,7 +942,25 @@ func _draw_station(station: Station) -> void:
 		draw_texture(Art.TRASH, rect.position)
 
 	if station.item:
-		ItemArt.draw_item(self, station.item, center)
+		var pop := item_pop(station.cell)
+		if pop > 0.0:
+			draw_set_transform(center + Vector2(0, -pop * 4.0), 0.0, Vector2(1.0 + pop * 0.3, 1.0 + pop * 0.3))
+			ItemArt.draw_item(self, station.item, Vector2.ZERO)
+			draw_set_transform(Vector2.ZERO)
+		elif station is StoveStation and (station as StoveStation).state == StoveStation.State.READY:
+			# Tampa a abanar: a panela treme quando está pronta.
+			ItemArt.draw_item(self, station.item, center + Vector2(roundf(sin(_time * 40.0) * 0.6), 0))
+		else:
+			ItemArt.draw_item(self, station.item, center)
+	if station is RegisterStation:
+		# Gaveta da caixa a abrir quando se cobra.
+		var age := _time - _register_time
+		if age < 0.9:
+			var out := minf(age / 0.08, 1.0) * (1.0 - clampf((age - 0.6) / 0.3, 0.0, 1.0))
+			var drawer := Rect2(rect.position + Vector2(4, 15 + out * 4.0), Vector2(16, 4))
+			draw_rect(drawer.grow(1), UiStyle.INK)
+			draw_rect(drawer, Color("c79a52"))
+			draw_rect(Rect2(drawer.position + Vector2(2, 1), Vector2(12, 1)), Color("f6c444"))
 	var p := station.progress()
 	if p >= 0.0:
 		var bar := Rect2(rect.position + Vector2(2, -6), Vector2(TILE - 4, 4))
@@ -814,6 +982,9 @@ func _draw_pass(pass_station: PassStation, rect: Rect2) -> void:
 	if middle and pass_station.item == null:
 		# Campainha dourada.
 		var b := rect.position + Vector2(12, 9)
+		var ring_age := _time - _bell_time
+		if ring_age < 0.6:
+			b.x += roundf(sin(ring_age * 50.0) * 1.5 * (1.0 - ring_age / 0.6))
 		draw_rect(Rect2(b + Vector2(-4, 2), Vector2(8, 2)), Color("3b2027"))
 		draw_circle(b, 3.0, Color("f6c444"))
 		draw_rect(Rect2(b + Vector2(-2, -2), Vector2(1, 1)), Color("fff3b0"))
@@ -821,7 +992,8 @@ func _draw_pass(pass_station: PassStation, rect: Rect2) -> void:
 	if pass_station.has_ready_plate():
 		var number := table_wanting(pass_station.item)
 		if number > 0:
-			var badge := Rect2((rect.get_center() + Vector2(-8, -22)).round(), Vector2(16, 9))
+			var float_y := roundf(sin(_time * 4.0) * 1.0) - item_pop(pass_station.cell) * 6.0
+			var badge := Rect2((rect.get_center() + Vector2(-8, -22 + float_y)).round(), Vector2(16, 9))
 			draw_rect(badge.grow(1), UiStyle.INK)
 			draw_rect(badge, Color("a02530"))
 			draw_string(UiStyle.FONT, badge.position + Vector2(0, 8), "M%d" % number, HORIZONTAL_ALIGNMENT_CENTER, badge.size.x, 9, UiStyle.TEXT)
@@ -867,7 +1039,20 @@ func _draw_customer(customer: Customer) -> void:
 		var walking := not sitting and not m.is_still()
 		var col := 3 if sitting else (1 + int(Time.get_ticks_msec() / 150.0) % 2 if walking else 0)
 		var bob := -1.0 if walking and col == 1 else 0.0
-		var top_left := m.pos - Vector2(Art.CUSTOMER_FRAME.x / 2.0, Art.CUSTOMER_FRAME.y - 6 - bob)
+		var wiggle := 0.0
+		if sitting:
+			var phase := _time + m.seat.x * 0.7 + m.seat.y * 1.3
+			if customer.state == Customer.State.EATING:
+				# A mastigar: abana a cabeça ao ritmo das garfadas.
+				bob = -1.0 if fmod(phase * 3.0, 1.0) < 0.3 else 0.0
+			elif customer.state in [Customer.State.CALLING, Customer.State.WAITING]:
+				var t := customer.patience / customer.max_patience
+				if t < 0.4:
+					# Impaciente: bate o pé e mexe-se na cadeira.
+					wiggle = roundf(sin(phase * (10.0 if t < 0.2 else 5.0)) * 0.8)
+				elif fmod(phase, 4.0) < 0.15:
+					bob = -1.0  # olha à volta de vez em quando
+		var top_left := m.pos - Vector2(Art.CUSTOMER_FRAME.x / 2.0 - wiggle, Art.CUSTOMER_FRAME.y - 6 - bob)
 		# Quem está sentado à esquerda da mesa fica virado para a direita.
 		var flip := sitting and m.seat.x < customer.table.cell.x
 		draw_actor_shadow(self, m.pos + Vector2(0, 5), m.pos, 5.0)

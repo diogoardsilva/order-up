@@ -40,7 +40,12 @@ Depois do lobby escolhem o **restaurante** e os **ajudantes** (cima/baixo escolh
 | Rocket Diner | Estados Unidos | Hambúrguer, Cheeseburger, Batatas Fritas |
 | Trattoria Nonna | Itália | Pizza, Esparguete, Caprese |
 
-O restaurante tem a **cozinha** (esquerda) e o **salão** (direita). Têm 3 minutos para servir o máximo de clientes.
+O restaurante tem a **cozinha** (esquerda) e o **salão** (direita). Há dois modos (linha "Modo" no ecrã do restaurante):
+
+- **Serviço**: 3 minutos para servir o máximo de clientes e ganhar até 3 estrelas.
+- **Casa Aberta** (modo infinito): começa com a porta fechada, para prepararem a cozinha com calma. Quando quiserem, vão à porta e carreguem em pegar para **abrir**. A partir daí os clientes não param de chegar (cada vez mais depressa) e o relógio conta o tempo aberto. Na porta, pegar **fecha**: já não entra ninguém e, quando sair o último cliente, aparece o resumo e o recorde do restaurante. Enquanto estão a fechar, pegar na porta **reabre**.
+
+Em todo o lado os botões aparecem desenhados como no vosso comando (✕ ○ □ △ no PlayStation, A B X Y no Xbox) ou como teclas. Virados para uma estação, aparece por cima dela o que o botão faz ali ("✕ Anotar pedido", "□ Cortar", "□ Cobrar"...).
 
 - Os clientes chegam em **grupos de 1 a 4** e sentam-se em mesas de 2 ou de 4. Quando aparece o balão "!", vão à mesa e carreguem em pegar para **anotar o pedido** (um prato por pessoa).
 - À esquerda, **Para cozinhar** mostra um cartão por prato com quantos faltam (x3), os ingredientes desenhados e com o nome, e a receita. Por baixo, **Mesas** mostra cada mesa (a mais impaciente em cima) com o que falta e a paciência.

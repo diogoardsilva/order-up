@@ -76,19 +76,12 @@ func update() -> void:
 					kitchen.hint_cells.append(station.cell)
 
 
-## Texto do passo atual com os botões de todos os jogadores, ex. "Espaço / Cruz".
+## Texto do passo atual, com {pick}/{use} no sítio dos botões (a HUD desenha
+## o botão de cada jogador no lugar deles).
 func text() -> String:
 	if is_finished():
 		return ""
-	var line: String = steps[step]["text"]
-	for action in [&"pick", &"use"]:
-		var names := PackedStringArray()
-		for p in PlayerRegistry.players:
-			var name: String = p["source"].prompt(action)
-			if not names.has(name):
-				names.append(name)
-		line = line.replace("{%s}" % action, " / ".join(names))
-	return "Passo %d de %d\n%s" % [step + 1, steps.size(), line]
+	return steps[step]["text"]
 
 
 func _held_ids() -> Array:

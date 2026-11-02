@@ -87,6 +87,11 @@ func _draw() -> void:
 		draw_string(font, Vector2(rect.position.x, 168), device, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 18, UiStyle.INK_SOFT)
 	else:
 		var a := 0.5 + 0.5 * sin(_time * 3.0 + index)
-		draw_string(font, Vector2(rect.position.x, 130), "Carrega em pegar", HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 24, Color(UiStyle.INK, 0.4 + 0.6 * a))
-		draw_string(font, Vector2(rect.position.x, 160), "para entrar", HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 24, Color(UiStyle.INK, 0.4 + 0.6 * a))
+		# O botão de pegar, a ser carregado de vez em quando, para se perceber logo.
+		var src := Glyphs.primary_source()
+		var h := 44.0
+		var pressed := fmod(_time + index * 0.3, 1.4) < 0.15
+		draw_string(font, Vector2(rect.position.x, 96), "Carrega em", HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 24, Color(UiStyle.INK, 0.4 + 0.6 * a))
+		Glyphs.draw(self, src, &"pick", Vector2(rect.get_center().x - Glyphs.width(src, &"pick", h) / 2.0, 128), h, pressed)
+		draw_string(font, Vector2(rect.position.x, 176), "para entrar", HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 24, Color(UiStyle.INK, 0.4 + 0.6 * a))
 	draw_set_transform(Vector2.ZERO)

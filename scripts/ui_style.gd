@@ -98,7 +98,25 @@ static func button(text: String, on_pressed: Callable, width := 380.0) -> Button
 	b.mouse_entered.connect(func(): b.grab_focus())
 	b.pressed.connect(func():
 		Sfx.play("ui_confirm")
+		# Afunda e volta, como um botão a sério.
+		b.pivot_offset = b.size / 2.0
+		var t := b.create_tween()
+		t.tween_property(b, "scale", Vector2(0.95, 0.95), 0.05)
+		t.tween_property(b, "scale", Vector2(1.06, 1.06) if b.has_focus() else Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		on_pressed.call())
+	# No botão escolhido aparece o botão do comando que o carrega (✕, A ou Espaço).
+	var glyph := Control.new()
+	glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	glyph.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	glyph.position = Vector2(-10, 0)
+	glyph.draw.connect(func():
+		if b.has_focus():
+			var src := Glyphs.primary_source()
+			var h := minf(30.0, b.size.y * 0.55)
+			Glyphs.draw(glyph, src, &"pick", Vector2(-Glyphs.width(src, &"pick", h), 0), h))
+	b.add_child(glyph)
+	b.focus_entered.connect(glyph.queue_redraw)
+	b.focus_exited.connect(glyph.queue_redraw)
 	return b
 
 

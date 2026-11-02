@@ -22,7 +22,21 @@ var _hud: Control
 var _time_left := ROUND_TIME
 var _finished := false
 var _tutorial: Tutorial
-var _tutorial_label: Label
+var _tutorial_step := -1
+var _cards := {}  # cartão da coluna da esquerda -> posição animada
+var _card_frame := 0
+var _ui_parts: Array[Dictionary] = []  # partículas da HUD (brilhos, confetes)
+var _flying: Array[Dictionary] = []  # moedas a voar da caixa para a pontuação
+var _opened := false
+var _open_anim := 2.4  # quando aparece o "Abrimos!" (_clock)
+# Modo Casa Aberta: preparar com a porta fechada, abrir e fechar quando se quer.
+var _endless := false
+var _open := false
+var _closing := false
+var _open_time := 0.0
+var _new_record := false
+var _ctx_anim := {}  # slot do chef -> animação da legenda por cima da estação
+var _tutorial_anim := 0.0  # 0 → 1 quando aparece um passo novo
 var _ready_peers: Array[int] = []
 var _net_frame := 0
 # Animações da HUD.
@@ -45,6 +59,8 @@ func _ready() -> void:
 		GameState.level = 0
 	_level = Levels.get_level(GameState.level)
 	_orders.menu = Levels.dishes(_level)
+	_endless = GameState.endless and not _orders.scripted
+	_orders.closed = _endless
 	add_child(_orders)
 	_kitchen = Kitchen.new(_orders, _level)
 	_kitchen.name = "Kitchen"
@@ -52,6 +68,10 @@ func _ready() -> void:
 	_kitchen.scale = Vector2.ONE * WORLD_SCALE
 	add_child(_kitchen)
 	_orders.kitchen = _kitchen
+	if _endless:
+		_kitchen.door_button = true
+		_kitchen.door_used.connect(_on_door)
+		_open_anim = -10.0
 	# Cor, vinheta e bloom por cima do mundo (conforme as opções de gráficos).
 	add_child(PostFX.new(1))
 	if Net.is_client():
@@ -93,17 +113,6 @@ func _ready() -> void:
 
 	if _orders.scripted:
 		_tutorial = Tutorial.new(_kitchen, _orders)
-		var panel := PanelContainer.new()
-		panel.add_theme_stylebox_override("panel", UiStyle.paper_box())
-		# Na coluna da esquerda, por baixo dos talões (no tutorial há no máximo 2).
-		panel.position = Vector2(6, 262)
-		panel.custom_minimum_size = Vector2(150, 0)
-		_tutorial_label = UiStyle.label("", 17, UiStyle.INK)
-		_tutorial_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-		_tutorial_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		_tutorial_label.custom_minimum_size.x = 128
-		panel.add_child(_tutorial_label)
-		layer.add_child(panel)
 
 	PlayerRegistry.players_changed.connect(_on_players_changed)
 	if Net.is_client():
@@ -140,50 +149,92 @@ func _process(delta: float) -> void:
 	_clock += delta
 	if _tutorial:
 		_tutorial.update()
-		_tutorial_label.text = _tutorial.text()
-		# Por baixo dos cartões de pedidos.
-		_tutorial_label.get_parent().position.y = maxf(_tickets_bottom + 8.0, 120.0)
+		if _tutorial.step != _tutorial_step:
+			if _tutorial_step >= 0:
+				Sfx.play("step_done", -2.0, 0.0)
+			_tutorial_step = _tutorial.step
+			_tutorial_anim = 0.0
+		_tutorial_anim = minf(_tutorial_anim + delta * 3.0, 1.0)
 		if _tutorial.is_finished() and not _finished:
 			GameState.mark_tutorial_done()
-			_tutorial_label.get_parent().hide()
 			_finish()
+	elif _endless:
+		_kitchen.hint_cells.clear()
+		if not _open:
+			_kitchen.hint_cells.append(_kitchen.door_cell())
+		if _open and not _finished:
+			_open_time += delta
+			# Cada vez mais clientes: de 15 em 15 segundos até um grupo a cada 6.
+			_orders.spawn_every = maxf(6.0, OrderManager.SPAWN_EVERY - _open_time / 40.0)
+			if _closing and _orders.customers.is_empty() and Net.is_host():
+				_finish()
 	elif not _finished and Net.is_host():
 		_time_left = maxf(_time_left - delta, 0.0)
 		if _time_left == 0.0:
 			_finish()
 	# Tique-taque nos últimos 10 segundos.
 	var sec := ceili(_time_left)
-	if not _tutorial and not _finished and sec <= 10 and sec != _last_second:
+	if not _tutorial and not _endless and not _finished and sec <= 10 and sec != _last_second:
 		Sfx.play("ui_move", -4.0, 0.0)
 	_last_second = sec
 	# Pontuação a subir aos poucos, com um "pulo" quando aumenta.
 	if _orders.score > _last_score:
-		_score_pulse = 1.0
+		_spawn_coins(_orders.score - _last_score)
 	_last_score = _orders.score
-	_shown_score = move_toward(_shown_score, _orders.score, maxf(40.0, absf(_orders.score - _shown_score) * 4.0) * delta)
+	_update_ui_fx(delta)
+	Sfx.set_murmur(0.0 if _finished else minf(_orders.customers.size() / 6.0, 1.0))
+	# "Abrimos!" quando sai o letreiro do restaurante.
+	if not _opened and not _tutorial and _clock > _open_anim and _open_anim > 0.0:
+		_opened = true
+		Sfx.play("go", -4.0, 0.0)
+		_confetti(Vector2(640, 300), 40, 1.4)
+	# A pontuação só sobe quando as moedas chegam.
+	if _flying.is_empty() or _finished:
+		_shown_score = move_toward(_shown_score, _orders.score, maxf(40.0, absf(_orders.score - _shown_score) * 4.0) * delta)
 	_score_pulse = maxf(_score_pulse - delta * 2.5, 0.0)
 	if _finished:
 		_finish_time += delta
 		var stars := _stars() if not _tutorial else 0
+		if _new_record and _stars_played == 0 and _finish_time > 1.2:
+			_stars_played = 1
+			Sfx.play("star", -2.0, 0.0)
+			Sfx.play("sparkle", -6.0, 0.0)
+			_confetti(Vector2(640, 440), 50, 1.2)
 		while _stars_played < stars and _finish_time > 1.0 + _stars_played * 0.45:
 			_stars_played += 1
-			Sfx.play("coin", 0.0, 0.0)
+			Sfx.play("star", -2.0, 0.0)
+			Sfx.play("sparkle", -6.0, 0.0)
+			_confetti(Vector2(640 + (_stars_played - 2) * 110, 140 + 280), 26, 0.7)
 	# Ao longo da ronda a luz passa de fim de tarde a noite (iluminação Ultra).
-	_kitchen.evening = 0.15 + 0.85 * (1.0 - _time_left / ROUND_TIME) if not _tutorial else 0.3
+	if _endless:
+		# Dia e noite a passar devagar (um ciclo a cada 6 minutos).
+		_kitchen.evening = 0.2 + 0.75 * (0.5 - 0.5 * cos(_open_time / 360.0 * TAU))
+	else:
+		_kitchen.evening = 0.15 + 0.85 * (1.0 - _time_left / ROUND_TIME) if not _tutorial else 0.3
 	_hud.queue_redraw()
+
+
+func _exit_tree() -> void:
+	Sfx.set_murmur(0.0)
 
 
 func _finish() -> void:
 	_finished = true
-	if not _tutorial:
+	if _endless:
+		_new_record = GameState.save_endless(_level["id"], _orders.score)
+	elif not _tutorial:
 		GameState.save_stars(_level["id"], _stars())
 	_orders.active = false
 	Sfx.play("round_end")
+	Sfx.play("swoosh", -2.0, 0.0)
 	for chef in _kitchen.chefs:
 		chef.frozen = true
+		chef.celebrate = _tutorial != null or _stars() > 0 or (_endless and _orders.score > 0)
 
 
 func _stars() -> int:
+	if _endless:
+		return 0
 	return _level["stars"].filter(func(s): return _orders.score >= s).size()
 
 
@@ -208,18 +259,27 @@ func _draw_hud() -> void:
 		_hud.draw_texture_rect(_vignette, Rect2(Vector2.ZERO, Vector2(1280, 720)), false)
 	_draw_world_labels()
 	_draw_tickets()
+	_draw_tutorial()
+	_draw_endless_banner()
 	_draw_players()
 	if not _tutorial:
 		# Relógio e pontos à direita.
-		var secs := ceili(_time_left)
-		var urgent := secs <= 30 and not _finished
+		var secs := ceili(_time_left) if not _endless else floori(_open_time)
+		var urgent := secs <= 30 and not _finished and not _endless
 		var clock_rect := Rect2(1132, 10, 138, 60)
 		_hud.draw_style_box(UiStyle.panel_box(), clock_rect)
 		_hud.draw_texture_rect(Art.CLOCK, Rect2(clock_rect.position + Vector2(14, 18), Vector2(24, 24)), false)
 		var pulse := 1.0 + (0.12 * absf(sin(_clock * 6.0)) if urgent else 0.0)
 		_hud.draw_set_transform(clock_rect.position + Vector2(90, 40), 0.0, Vector2(pulse, pulse))
-		_hud.draw_string(font, Vector2(-44, 0), "%d:%02d" % [secs / 60, secs % 60], HORIZONTAL_ALIGNMENT_CENTER, 88, 30,
-			UiStyle.RED if urgent else UiStyle.INK)
+		var clock_text := "%d:%02d" % [secs / 60, secs % 60]
+		var clock_color := UiStyle.RED if urgent else UiStyle.INK
+		if _endless and not _open:
+			clock_text = "Fechado"
+			clock_color = UiStyle.RED
+		elif _endless and _closing and fmod(_clock, 1.6) < 0.8:
+			clock_text = "A fechar"
+			clock_color = UiStyle.INK_SOFT
+		_hud.draw_string(font, Vector2(-44, 0), clock_text, HORIZONTAL_ALIGNMENT_CENTER, 88, 30 if clock_text.length() <= 5 else 22, clock_color)
 		_hud.draw_set_transform(Vector2.ZERO)
 		var score_rect := Rect2(1132, 78, 138, 60)
 		_hud.draw_style_box(UiStyle.panel_box(), score_rect)
@@ -229,8 +289,8 @@ func _draw_hud() -> void:
 		_hud.draw_string(font, Vector2(-44, 0), "%d" % roundi(_shown_score), HORIZONTAL_ALIGNMENT_CENTER, 88, 30, UiStyle.INK)
 		_hud.draw_set_transform(Vector2.ZERO)
 	# Nome do restaurante no início da ronda.
-	if _clock < 3.0 and not _tutorial:
-		var a := clampf(minf(_clock / 0.3, (3.0 - _clock) / 0.5), 0.0, 1.0)
+	if _clock < 2.4 and not _tutorial:
+		var a := clampf(minf(_clock / 0.3, (2.4 - _clock) / 0.4), 0.0, 1.0)
 		var banner := Rect2(440, 300 - (1.0 - a) * 30, 400, 96)
 		_hud.draw_style_box(UiStyle.panel_box(), banner)
 		_hud.draw_string(font, banner.position + Vector2(0, 48), _level["name"], HORIZONTAL_ALIGNMENT_CENTER, banner.size.x, 40, Color(UiStyle.INK, a))
@@ -241,6 +301,16 @@ func _draw_hud() -> void:
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, UiStyle.MUTED)
 	if _finished:
 		_draw_results()
+	_draw_ui_fx()
+	# "Abrimos!" a crescer e a desaparecer.
+	if not _tutorial and _clock > _open_anim and _clock < _open_anim + 1.2:
+		var t := (_clock - _open_anim) / 1.2
+		var s := 0.6 + ease(minf(t * 3.0, 1.0), 0.3) * 0.6 + t * 0.15
+		var a := 1.0 - clampf((t - 0.6) / 0.4, 0.0, 1.0)
+		_hud.draw_set_transform(Vector2(640, 330), sin(t * 8.0) * 0.04 * (1.0 - t), Vector2(s, s))
+		_hud.draw_string(UiStyle.FONT, Vector2(-300, 4), "Abrimos!", HORIZONTAL_ALIGNMENT_CENTER, 600, 84, Color(UiStyle.INK, a))
+		_hud.draw_string(UiStyle.FONT, Vector2(-300, 0), "Abrimos!", HORIZONTAL_ALIGNMENT_CENTER, 600, 84, Color(UiStyle.GOLD, a))
+		_hud.draw_set_transform(Vector2.ZERO)
 
 
 func _draw_tickets() -> void:
@@ -268,7 +338,7 @@ func _draw_tickets() -> void:
 		var hint: String = recipe["hint"]
 		var hint_h := font.get_multiline_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, w - 14, 13, 3).y
 		var raw := _raw_ingredients(recipe)
-		var rect := Rect2(Vector2(x, y), Vector2(w, 40 + hint_h + 36))
+		var rect := Rect2(_card("d" + id, Vector2(x, y)), Vector2(w, 40 + hint_h + 36))
 		if pulse > 0.0:
 			_hud.draw_rect(rect.grow(2 + pulse * 3), Color(UiStyle.GOLD, pulse))
 		_hud.draw_style_box(UiStyle.paper_box(), rect)
@@ -313,7 +383,7 @@ func _draw_tickets() -> void:
 		shown += 1
 		var t := customer.patience / customer.max_patience
 		var shake := Vector2(sin(_clock * 40.0) * 2.0, 0) if t < 0.25 and not _tutorial else Vector2.ZERO
-		var rect := Rect2(Vector2(x, y) + shake, Vector2(w, 46))
+		var rect := Rect2(_card("m%d" % customer.id, Vector2(x, y)) + shake, Vector2(w, 46))
 		_hud.draw_style_box(UiStyle.paper_box(), rect)
 		var badge := Rect2(rect.position + Vector2(6, 6), Vector2(36, 24))
 		_hud.draw_rect(badge, Color("a02530"))
@@ -337,6 +407,97 @@ func _draw_tickets() -> void:
 			_hud.draw_rect(Rect2(bar.position, Vector2(bar.size.x * t, bar.size.y)), UiStyle.RED.lerp(UiStyle.GREEN, t))
 		y += rect.size.y + 5
 	_tickets_bottom = y
+	_prune_cards()
+
+
+## Posição animada de um cartão: entra a deslizar da esquerda e, quando os de
+## cima desaparecem, sobe suavemente em vez de saltar.
+func _card(key: String, target: Vector2) -> Vector2:
+	var c: Dictionary = _cards.get(key, {})
+	var dt := get_process_delta_time()
+	if c.is_empty():
+		c = {"y": target.y, "age": 0.0}
+		_cards[key] = c
+		if _clock > 0.5:
+			Sfx.play("pop", -10.0, 0.1)
+	c["age"] += dt
+	c["y"] = lerpf(c["y"], target.y, minf(dt * 12.0, 1.0))
+	c["frame"] = _card_frame
+	c["x"] = target.x
+	var slide := 1.0 - ease(minf(c["age"] / 0.35, 1.0), -2.5)
+	return Vector2(target.x - slide * 170.0, c["y"])
+
+
+## Cartões que deixaram de aparecer: um brilho onde estavam (pedido servido).
+func _prune_cards() -> void:
+	for key in _cards.keys():
+		var c: Dictionary = _cards[key]
+		if c["frame"] != _card_frame:
+			if String(key).begins_with("m") and not _finished:
+				for i in 10:
+					_ui_parts.append({"pos": Vector2(c["x"] + randf_range(10, 140), c["y"] + randf_range(5, 40)), "vel": Vector2(randf_range(-40, 40), randf_range(-60, -20)),
+						"life": 0.6, "max": 0.6, "color": UiStyle.GOLD, "size": 3.0, "acc": Vector2.ZERO})
+			_cards.erase(key)
+	_card_frame += 1
+
+
+## Partículas da HUD e moedas a voar para a pontuação.
+func _update_ui_fx(delta: float) -> void:
+	for p in _ui_parts:
+		p["life"] -= delta
+		p["vel"] += p["acc"] * delta
+		p["pos"] += p["vel"] * delta
+	_ui_parts = _ui_parts.filter(func(p): return p["life"] > 0.0)
+	for f in _flying:
+		f["t"] += delta
+		if f["t"] >= f["dur"] and not f["done"]:
+			f["done"] = true
+			_score_pulse = 1.0
+			Sfx.play("coin", -12.0, 0.2)
+			for i in 4:
+				_ui_parts.append({"pos": f["to"], "vel": Vector2.RIGHT.rotated(randf() * TAU) * randf_range(40, 90),
+					"life": 0.35, "max": 0.35, "color": UiStyle.GOLD, "size": 3.0, "acc": Vector2.ZERO})
+	_flying = _flying.filter(func(f): return not f["done"])
+
+
+func _draw_ui_fx() -> void:
+	for p in _ui_parts:
+		var c: Color = p["color"]
+		c.a *= clampf(p["life"] / p["max"] * 1.5, 0.0, 1.0)
+		var sz: float = p["size"]
+		if p.get("confetti", false):
+			var w := absf(sin(p["life"] * 9.0 + sz)) * 6.0 + 1.0
+			_hud.draw_rect(Rect2(p["pos"] - Vector2(w, 3) / 2.0, Vector2(w, 4)), c)
+		else:
+			_hud.draw_rect(Rect2(p["pos"] - Vector2(sz, sz) / 2.0, Vector2(sz, sz)), c)
+	for f in _flying:
+		var t: float = clampf(f["t"] / f["dur"], 0.0, 1.0)
+		if t <= 0.0:
+			continue
+		var e := ease(t, 1.8)
+		var from: Vector2 = f["from"]
+		var to: Vector2 = f["to"]
+		var ctrl: Vector2 = (from + to) / 2.0 + Vector2(f["bend"], -160)
+		var pos := from.lerp(ctrl, e).lerp(ctrl.lerp(to, e), e)
+		var spin := absf(cos(f["t"] * 12.0))
+		var size := Vector2(22 * maxf(spin, 0.15), 22) * (1.0 + sin(t * PI) * 0.4)
+		_hud.draw_texture_rect(Art.COIN, Rect2(pos - size / 2.0, size), false)
+
+
+func _spawn_coins(amount: int) -> void:
+	var from := _to_screen(_kitchen.register_center() + Vector2(0, -10))
+	var n := clampi(amount / 8, 3, 9)
+	for i in n:
+		_flying.append({"t": -i * 0.06, "dur": 0.75, "from": from + Vector2(randf_range(-10, 10), 0), "to": Vector2(1132 + 26, 78 + 30),
+			"bend": randf_range(-120, 60), "done": false})
+
+
+func _confetti(at: Vector2, count: int, spread := 1.0) -> void:
+	var colors := [Color("ff6f6f"), UiStyle.GOLD, Color("6fcf6a"), Color("6fa8dc"), Color("eb94d6"), Color("fff8e6")]
+	for i in count:
+		_ui_parts.append({"pos": at + Vector2(randf_range(-20, 20), 0), "vel": Vector2(randf_range(-260, 260) * spread, randf_range(-420, -160)),
+			"life": 1.6 + randf() * 0.8, "max": 2.2, "color": colors.pick_random(), "size": randf() * 6.0,
+			"acc": Vector2(0, 520), "confetti": true})
 
 
 ## Nomes por cima do mundo, para se perceber que ingrediente é cada um: o nome
@@ -351,12 +512,112 @@ func _draw_world_labels() -> void:
 			_tag(_to_screen(_kitchen.cell_center(station.cell) + Vector2(0, 8)), name, 14, UiStyle.PAPER, UiStyle.INK)
 	for chef in _kitchen.chefs:
 		if chef.held:
-			_tag(_to_screen(chef.position + Vector2(0, -27)), Levels.item_name(chef.held), 15, Color("fff8e6"), chef.color.darkened(0.45))
+			# Por baixo dos pés, para não tapar a legenda do botão por cima da estação.
+			_tag(_to_screen(chef.position + Vector2(0, 17)), Levels.item_name(chef.held), 15, Color("fff8e6"), chef.color.darkened(0.45))
 		if chef.slot >= HELPER_SLOT or not chef.is_local:
 			continue
 		var target := _kitchen.station_at(chef.target_cell())
 		if target and target.item and not target is CrateStation:
 			_tag(_to_screen(_kitchen.cell_center(target.cell) + Vector2(0, -15)), Levels.item_name(target.item), 13, Color(UiStyle.INK, 0.85), UiStyle.TEXT)
+		_draw_context_prompt(chef, target)
+
+
+## O que o botão faz agora, mesmo por cima da estação para onde o jogador está
+## virado: "[✕] Anotar", "[□] Cortar", "[□] Cobrar"... Aparece com um pulo.
+func _draw_context_prompt(chef: Chef, target: Station) -> void:
+	var actions := _context_actions(chef, target) if target else []
+	var key := str(chef.slot)
+	var shown: Dictionary = _ctx_anim.get(key, {"text": "", "t": 0.0, "cell": Vector2i(-1, -1)})
+	var label := str(actions)
+	if label != shown["text"] or (target and target.cell != shown["cell"]):
+		shown = {"text": label, "t": 0.0, "cell": target.cell if target else Vector2i(-1, -1)}
+	shown["t"] = minf(shown["t"] + get_process_delta_time() * 6.0, 1.0)
+	_ctx_anim[key] = shown
+	if actions.is_empty():
+		return
+	var st: float = shown["t"]
+	var pop := 1.0 + 0.25 * sin(st * PI) * (1.0 - st)
+	var h := 20.0 * pop
+	var center := _to_screen(_kitchen.cell_center(target.cell) + Vector2(0, -27))
+	center.y -= (1.0 - ease(shown["t"], -2.0)) * 8.0
+	# Fundo escuro arredondado para se ler por cima de tudo.
+	var font_size := 15
+	var w := 0.0
+	for a in actions:
+		w += Glyphs.width(chef.source, a[0], h) + 5 + UiStyle.FONT.get_string_size(a[1], HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x + 10
+	var rect := Rect2(center - Vector2(w / 2.0 + 4, h / 2.0 + 3), Vector2(w + 6, h + 6))
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(0.1, 0.06, 0.07, 0.82 * shown["t"])
+	box.set_corner_radius_all(8)
+	box.border_color = Color(chef.color, 0.9 * shown["t"])
+	box.set_border_width_all(2)
+	_hud.draw_style_box(box, rect)
+	var x := rect.position.x + 6
+	for a in actions:
+		var pressed: bool = a[0] == &"use" and chef.use_down
+		x += Glyphs.draw(_hud, chef.source, a[0], Vector2(x, center.y), h, pressed) + 5
+		_hud.draw_string(UiStyle.FONT, Vector2(x, center.y + font_size * 0.36), a[1], HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(UiStyle.TEXT, shown["t"]))
+		x += UiStyle.FONT.get_string_size(a[1], HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x + 10
+
+
+## As ações que fazem alguma coisa nesta estação com o que o chef leva na mão.
+func _context_actions(chef: Chef, st: Station) -> Array:
+	var held := chef.held
+	var out := []
+	if _endless and st.cell == _kitchen.door_cell():
+		if _finished:
+			return out
+		return [[&"pick", "Abrir o restaurante" if not _open else ("Reabrir" if _closing else "Fechar o restaurante")]]
+	if held == null:
+		if st is CrateStation:
+			out.append([&"pick", "Pegar"])
+		elif st is TableStation:
+			var t := st as TableStation
+			if t.customer and t.customer.is_calling():
+				out.append([&"pick", "Anotar pedido"])
+			elif t.has_dirty():
+				out.append([&"pick", "Levantar pratos"])
+		elif st is RegisterStation:
+			if _orders.front_of_queue():
+				out.append([&"use", "Cobrar"])
+		elif st is SinkStation:
+			var sink := st as SinkStation
+			if sink.dirty > 0:
+				out.append([&"use", "Lavar"])
+			if sink.clean > 0:
+				out.append([&"pick", "Pegar prato"])
+		elif st is PlateStation:
+			out.append([&"pick", "Pegar prato"])
+		elif st.item:
+			if st is BoardStation and st.item.can_chop():
+				out.append([&"use", "Cortar"])
+			out.append([&"pick", "Pegar"])
+		return out
+	if st is TableStation:
+		var t := st as TableStation
+		if t.customer and t.customer.is_waiting() and held.is_plate() and (t.customer.wants(held) or (held.second and t.customer.wants(held.second))):
+			out.append([&"pick", "Servir"])
+		elif t.has_dirty() and held.is_plate() and held.dirty:
+			out.append([&"pick", "Levantar pratos"])
+	elif st is TrashStation:
+		out.append([&"pick", "Deitar fora" if not held.is_cookware() else "Despejar"])
+	elif st is SinkStation:
+		if held.is_plate() and held.dirty:
+			out.append([&"pick", "Pôr a lavar"])
+	elif st is StoveStation:
+		if st.item == null and held.is_cookware():
+			out.append([&"pick", "Pôr ao lume"])
+		elif st.item and held.is_ingredient():
+			out.append([&"pick", "Juntar"])
+		elif st.item and held.is_plate() and st.item.cook_state == StoveStation.State.READY:
+			out.append([&"pick", "Servir no prato"])
+	elif st is CrateStation or st is RegisterStation or st is PlateStation:
+		pass
+	elif st.item == null:
+		out.append([&"pick", "Pousar"])
+	elif held.is_plate() or st.item.is_plate() or st.item.is_cookware():
+		out.append([&"pick", "Juntar"])
+	return out
 
 
 func _to_screen(kitchen_pos: Vector2) -> Vector2:
@@ -433,11 +694,14 @@ func _draw_results() -> void:
 	var x := rect.position.x
 	var w := rect.size.x
 	var y := rect.position.y
+	if _endless:
+		_draw_endless_results(x, y, w)
+		return
 	if _tutorial:
 		_hud.draw_string(font, Vector2(x, y + 110), "Tutorial concluído!", HORIZONTAL_ALIGNMENT_CENTER, w, 52, UiStyle.INK)
 		_hud.draw_multiline_string(font, Vector2(x + 50, y + 180), "Já sabes anotar pedidos, cozinhar, servir às mesas e lavar pratos. Agora é a sério: 3 minutos e clientes impacientes.",
 			HORIZONTAL_ALIGNMENT_CENTER, w - 100, 24, -1, UiStyle.INK_SOFT)
-		_prompt(Vector2(x, y + 380), w, "Carrega em pegar para ir jogar")
+		_prompt(Vector2(x + w / 2.0, y + 380), "{pick} Ir jogar")
 		return
 	_hud.draw_string(font, Vector2(x, y + 90), "Fim do serviço!", HORIZONTAL_ALIGNMENT_CENTER, w, 52, UiStyle.INK)
 	_hud.draw_string(font, Vector2(x, y + 140), "Pagos: %d    Falhados: %d" % [_orders.paid_count, _orders.failed_count],
@@ -451,15 +715,73 @@ func _draw_results() -> void:
 		var s := 4.5
 		if full:
 			s *= 1.0 + 0.6 * maxf(0.0, 1.0 - age / 0.25) if age < 0.25 else 1.0
+		if full:
+			# Raios de luz a rodar atrás das estrelas ganhas.
+			var glow := clampf(age / 0.3, 0.0, 1.0)
+			for k in 10:
+				var ang := _clock * 0.6 + k * TAU / 10.0 + i
+				var p1 := center + Vector2.RIGHT.rotated(ang - 0.12) * 70.0
+				var p2 := center + Vector2.RIGHT.rotated(ang + 0.12) * 70.0
+				_hud.draw_colored_polygon(PackedVector2Array([center, p1, p2]), Color(UiStyle.GOLD, 0.22 * glow))
 		var tex := Art.STAR if full else Art.STAR_EMPTY
 		var size := tex.get_size() * s / 2.0
 		_hud.draw_texture_rect(tex, Rect2(center - size / 2.0, size), false)
-	_prompt(Vector2(x, y + 395), w, "À espera do host..." if Net.is_client() else "Carrega em pegar para voltar ao lobby")
+	_prompt(Vector2(x + w / 2.0, y + 395), "À espera do host..." if Net.is_client() else "{pick} Voltar ao lobby")
 
 
-func _prompt(at: Vector2, width: float, text: String) -> void:
-	var a := 0.55 + 0.45 * sin(_clock * 4.0)
-	_hud.draw_string(UiStyle.FONT, at, text, HORIZONTAL_ALIGNMENT_CENTER, width, 22, Color(UiStyle.INK, a))
+## Legenda a piscar devagar, com o botão desenhado. `center` é o meio da linha.
+func _prompt(center: Vector2, text: String) -> void:
+	var a := 0.7 + 0.3 * sin(_clock * 4.0)
+	var sources := _local_sources()
+	var w := _rich_width(sources, text, 26)
+	var bounce := absf(sin(_clock * 3.0)) * 2.0
+	Glyphs.draw_rich(_hud, sources, text, center - Vector2(w / 2.0, 22 + bounce), w + 4, 26, Color(UiStyle.INK, a))
+
+
+func _rich_width(sources: Array, text: String, size: int) -> float:
+	var w := 0.0
+	for word in text.split(" "):
+		for t in Glyphs._tokens(word):
+			w += Glyphs._token_w(sources, t, size * 1.25, size)
+		w += UiStyle.FONT.get_string_size(" ", HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+	return w
+
+
+## Fontes de input dos jogadores deste PC (para desenhar os botões certos).
+func _local_sources() -> Array:
+	var out := []
+	for chef in _kitchen.chefs:
+		if chef.is_local and chef.slot < HELPER_SLOT and chef.source:
+			out.append(chef.source)
+	if out.is_empty():
+		out.append(Glyphs.primary_source())
+	return out
+
+
+## Painel do tutorial: por baixo dos talões, com os botões desenhados no texto.
+## Cada passo novo entra a deslizar e com um brilho.
+func _draw_tutorial() -> void:
+	if not _tutorial or _tutorial.is_finished() or _finished:
+		return
+	var sources := _local_sources()
+	var text := _tutorial.text()
+	var w := 150.0
+	var inner := w - 18.0
+	var text_h := Glyphs.draw_rich(_hud, sources, text, Vector2.ZERO, inner, 17, UiStyle.INK, 1.3, true)
+	var t := ease(_tutorial_anim, -2.4)
+	var rect := Rect2(Vector2(6 - (1.0 - t) * 190.0, maxf(_tickets_bottom + 8.0, 120.0)), Vector2(w, text_h + 44))
+	_hud.draw_style_box(UiStyle.paper_box(), rect)
+	# Cabeçalho: "Passo 3 de 16" e uma barra de progresso.
+	var head := rect.position + Vector2(10, 8)
+	_hud.draw_string(UiStyle.FONT, head + Vector2(0, 12), "Passo %d de %d" % [_tutorial.step + 1, _tutorial.steps.size()], HORIZONTAL_ALIGNMENT_LEFT, -1, 15, UiStyle.INK_SOFT)
+	var bar := Rect2(head + Vector2(0, 18), Vector2(inner, 4))
+	_hud.draw_rect(bar, Color(UiStyle.INK, 0.15))
+	var done := float(_tutorial.step) / _tutorial.steps.size()
+	_hud.draw_rect(Rect2(bar.position, Vector2(bar.size.x * done, bar.size.y)), UiStyle.GOLD)
+	Glyphs.draw_rich(_hud, sources, text, rect.position + Vector2(9, 32), inner, 17, UiStyle.INK, 1.3)
+	# Brilho a passar quando chega um passo novo.
+	if _tutorial_anim < 1.0:
+		_hud.draw_rect(rect, Color(1, 0.95, 0.7, 0.35 * (1.0 - _tutorial_anim)))
 
 
 func _on_interact(chef: Chef) -> void:
@@ -529,6 +851,77 @@ func _on_players_changed() -> void:
 			chef.queue_free()
 
 
+## Casa Aberta: a porta abre o restaurante, fecha-o (deixa de entrar gente e,
+## quando sair o último cliente, acaba) ou reabre-o. Só no anfitrião.
+func _on_door(_chef: Chef) -> void:
+	if _finished:
+		return
+	if not _open:
+		_set_door(true, false)
+	else:
+		_set_door(true, not _closing)
+
+
+## Muda o estado da porta, com sons e efeitos (no anfitrião e nos outros PCs).
+func _set_door(open: bool, closing: bool) -> void:
+	if open == _open and closing == _closing:
+		return
+	var opening := open and not _open
+	_open = open
+	_closing = closing
+	_orders.closed = not open or closing
+	var at := _kitchen.cell_center(_kitchen.door_cell())
+	if opening:
+		_open_anim = _clock
+		_opened = false
+		_kitchen._door_time = _kitchen._time
+		Sfx.play("door", -2.0, 0.0)
+		# O primeiro grupo chega logo.
+		_orders._spawn = _orders.spawn_every - 1.5
+	elif closing:
+		Sfx.play("ui_back", -2.0, 0.0)
+		_kitchen.particles.text(at + Vector2(0, -20), "A fechar...", UiStyle.GOLD)
+	else:
+		Sfx.play("ui_confirm", -2.0, 0.0)
+		_kitchen.particles.text(at + Vector2(0, -20), "Reaberto!", UiStyle.GREEN)
+
+
+## Casa Aberta: aviso por cima do salão enquanto se prepara ou se está a fechar.
+func _draw_endless_banner() -> void:
+	if not _endless or _finished or (_open and not _closing) or _clock < 2.4:
+		return
+	var text := "Casa Aberta: preparem a cozinha com calma (cortem, cozinhem, tenham pratos prontos). Quando estiverem prontos, vão à porta e carreguem em {pick} para abrir." if not _open \
+		else "A fechar: já não entra ninguém. Atendam e cobrem os últimos clientes. Para continuar, {pick} na porta para reabrir."
+	var sources := _local_sources()
+	var w := 520.0
+	var text_h := Glyphs.draw_rich(_hud, sources, text, Vector2.ZERO, w - 32, 20, UiStyle.INK, 1.3, true)
+	var a := clampf((_clock - 2.4) / 0.4, 0.0, 1.0)
+	var rect := Rect2(Vector2(1280 - 150 - w - 20, 96 - (1.0 - ease(a, -2.0)) * 40.0), Vector2(w, text_h + 26))
+	_hud.draw_style_box(UiStyle.paper_box(), rect)
+	Glyphs.draw_rich(_hud, sources, text, rect.position + Vector2(16, 14), w - 32, 20, UiStyle.INK, 1.3)
+
+
+func _draw_endless_results(x: float, y: float, w: float) -> void:
+	var font := UiStyle.FONT
+	var secs := floori(_open_time)
+	_hud.draw_string(font, Vector2(x, y + 86), "Casa fechada!", HORIZONTAL_ALIGNMENT_CENTER, w, 52, UiStyle.INK)
+	_hud.draw_string(font, Vector2(x, y + 132), "Aberto %d:%02d    Pratos servidos: %d" % [secs / 60, secs % 60, _orders.delivered_count],
+		HORIZONTAL_ALIGNMENT_CENTER, w, 24, UiStyle.INK_SOFT)
+	_hud.draw_string(font, Vector2(x, y + 162), "Pagos: %d    Falhados: %d" % [_orders.paid_count, _orders.failed_count],
+		HORIZONTAL_ALIGNMENT_CENTER, w, 24, UiStyle.INK_SOFT)
+	_hud.draw_texture_rect(Art.COIN, Rect2(Vector2(x + w / 2 - 90, y + 196), Vector2(36, 36)), false)
+	_hud.draw_string(font, Vector2(x + w / 2 - 44, y + 228), "%d" % roundi(_shown_score), HORIZONTAL_ALIGNMENT_LEFT, -1, 40, UiStyle.INK)
+	if _new_record and _finish_time > 1.2:
+		var pop := 1.0 + maxf(0.0, 1.0 - (_finish_time - 1.2) / 0.25) * 0.5
+		_hud.draw_set_transform(Vector2(x + w / 2.0, y + 300), sin(_clock * 3.0) * 0.05, Vector2(pop, pop))
+		_hud.draw_string(font, Vector2(-200, 4), "Novo recorde!", HORIZONTAL_ALIGNMENT_CENTER, 400, 44, UiStyle.INK)
+		_hud.draw_string(font, Vector2(-200, 0), "Novo recorde!", HORIZONTAL_ALIGNMENT_CENTER, 400, 44, UiStyle.GOLD)
+		_hud.draw_set_transform(Vector2.ZERO)
+	else:
+		_hud.draw_string(font, Vector2(x, y + 300), "Recorde: %d" % GameState.best_endless(_level["id"]), HORIZONTAL_ALIGNMENT_CENTER, w, 26, UiStyle.INK_SOFT)
+	_prompt(Vector2(x + w / 2.0, y + 395), "À espera do host..." if Net.is_client() else "{pick} Voltar ao lobby")
+
+
 func _snapshot() -> Array:
 	var chefs := _kitchen.chefs.map(func(c: Chef):
 		return [c.slot, c.position, c.facing, Item.serialize(c.held), c.use_down, c.emote_left])
@@ -537,7 +930,7 @@ func _snapshot() -> Array:
 		var data: Variant = station.serialize()
 		if data != null:
 			stations.append([station.cell, data])
-	return [chefs, stations, _orders.serialize(), _time_left, _finished, _kitchen.serialize_loose()]
+	return [chefs, stations, _orders.serialize(), _time_left, _finished, _kitchen.serialize_loose(), [_open, _closing, _open_time]]
 
 
 func _chef_for_slot(slot: int) -> Chef:
@@ -609,6 +1002,9 @@ func _rpc_snapshot(data: Array) -> void:
 	_orders.apply(data[2])
 	_kitchen.apply_loose(data[5])
 	_time_left = data[3]
+	if _endless and data.size() > 6:
+		_set_door(data[6][0], data[6][1])
+		_open_time = data[6][2]
 	if data[4] and not _finished:
 		_finish()
 

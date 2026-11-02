@@ -15,8 +15,12 @@ var _last_x := {}
 var _last_y := {}
 var _helper_labels: Array[Label] = []
 var _desc_label: Label
-## Linha escolhida: 0 = restaurantes, 1 e 2 = ajudantes.
+## Linha escolhida: 0 = restaurantes, 1 = modo, 2 e 3 = ajudantes.
 var _row := 0
+var _mode_label: Label
+const MODE_NAMES := ["Serviço (3 minutos, com estrelas)", "Casa Aberta (sem fim)"]
+const MODE_DESC := ["Ronda de 3 minutos: façam pontos para ganhar as 3 estrelas.",
+	"Preparem a cozinha com calma, abram a porta quando quiserem e fechem quando quiserem parar."]
 var _cards: Control
 
 
@@ -34,28 +38,39 @@ func _ready() -> void:
 	_cards.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_cards.draw.connect(_draw_cards)
 	add_child(_cards)
+	_mode_label = UiStyle.label("", 26, UiStyle.TEXT, 8)
+	_mode_label.position = Vector2(0, 540)
+	_mode_label.size = Vector2(1280, 36)
+	add_child(_mode_label)
 	for i in GameState.MAX_HELPERS:
-		var l := UiStyle.label("", 26, UiStyle.TEXT, 8)
-		l.position = Vector2(0, 562 + i * 34)
+		var l := UiStyle.label("", 24, UiStyle.TEXT, 8)
+		l.position = Vector2(0, 574 + i * 30)
 		l.size = Vector2(1280, 36)
 		add_child(l)
 		_helper_labels.append(l)
 	_refresh_helper()
 	_desc_label = UiStyle.label("", 19, UiStyle.MUTED, 6)
-	_desc_label.position = Vector2(0, 630)
+	_desc_label.position = Vector2(0, 634)
 	_desc_label.size = Vector2(1280, 30)
 	add_child(_desc_label)
-	var help := UiStyle.label(_help_text(), 22, UiStyle.TEXT, 6)
-	help.position = Vector2(0, 668)
-	help.size = Vector2(1280, 40)
-	add_child(help)
+	if Net.is_client():
+		var wait := UiStyle.label(_help_text(), 22, UiStyle.TEXT, 6)
+		wait.position = Vector2(0, 668)
+		wait.size = Vector2(1280, 40)
+		add_child(wait)
+	else:
+		var help := PromptBar.new([[&"move", "Escolher e mudar"], [&"pick", "Começar"], [&"dash", "Voltar"]])
+		help.position = Vector2(0, 668)
+		help.size = Vector2(1280, 44)
+		add_child(help)
 	for source in DeviceManager.all_sources():
 		source.poll()
 		_last_x[source] = source.move.x
 		_last_y[source] = source.move.y
-	Net.level_choice_changed.connect(func(i: int, helpers: Array):
+	Net.level_choice_changed.connect(func(i: int, helpers: Array, endless: bool):
 		_index = i
 		GameState.helpers = helpers.duplicate()
+		GameState.endless = endless
 		_refresh_helper()
 		Sfx.play("ui_move"))
 	Sfx.music_on()
@@ -68,13 +83,20 @@ func _help_text() -> String:
 
 
 func _refresh_helper() -> void:
+	var mode_name: String = MODE_NAMES[1 if GameState.endless else 0]
+	if _mode_label:
+		_mode_label.text = ("> Modo:  < %s >" if _row == 1 else "Modo:  %s") % mode_name
+		_mode_label.add_theme_color_override("font_color", UiStyle.GOLD if _row == 1 else UiStyle.TEXT)
 	for i in _helper_labels.size():
 		var name: String = GameState.HELPER_PRESETS[GameState.helpers[i]][0]
-		var focused := _row == i + 1
+		var focused := _row == i + 2
 		_helper_labels[i].text = ("> Ajudante %d:  < %s >" if focused else "Ajudante %d:  %s") % [i + 1, name]
 		_helper_labels[i].add_theme_color_override("font_color", UiStyle.GOLD if focused else UiStyle.TEXT)
 	if _desc_label:
-		_desc_label.text = GameState.HELPER_PRESETS[GameState.helpers[_row - 1]][3] if _row > 0 else ""
+		if _row == 1:
+			_desc_label.text = MODE_DESC[1 if GameState.endless else 0]
+		else:
+			_desc_label.text = GameState.HELPER_PRESETS[GameState.helpers[_row - 2]][3] if _row > 1 else ""
 
 
 func _can_choose(source: InputSource) -> bool:
@@ -97,26 +119,29 @@ func _process(delta: float) -> void:
 		if not _can_choose(source):
 			continue
 		if absf(y) > 0.5 and absf(last_y) <= 0.5:
-			_row = clampi(_row + (1 if y > 0.0 else -1), 0, GameState.MAX_HELPERS)
+			_row = clampi(_row + (1 if y > 0.0 else -1), 0, GameState.MAX_HELPERS + 1)
 			_refresh_helper()
 			Sfx.play("ui_move")
 		if absf(x) > 0.5 and absf(last) <= 0.5:
 			var dir := 1 if x > 0.0 else -1
 			if _row == 0:
 				_index = clampi(_index + dir, 0, Levels.ALL.size() - 1)
+			elif _row == 1:
+				GameState.set_endless(not GameState.endless)
+				_refresh_helper()
 			else:
 				var helpers := GameState.helpers.duplicate()
-				helpers[_row - 1] = posmod(helpers[_row - 1] + dir, GameState.HELPER_PRESETS.size())
+				helpers[_row - 2] = posmod(helpers[_row - 2] + dir, GameState.HELPER_PRESETS.size())
 				GameState.set_helpers(helpers)
 				_refresh_helper()
 			Sfx.play("ui_move")
 			if Net.online:
-				Net.set_level_choice.rpc(_index, GameState.helpers)
+				Net.set_level_choice.rpc(_index, GameState.helpers, GameState.endless)
 		elif source.just_pressed(&"pick"):
 			Sfx.play("ui_confirm")
 			GameState.level = _index
 			if Net.online:
-				Net.start_level.rpc(_index, GameState.helpers)
+				Net.start_level.rpc(_index, GameState.helpers, GameState.endless)
 			else:
 				GameState.mode = GameState.Mode.PLAY
 				Transition.go("res://scenes/level.tscn")
@@ -141,7 +166,7 @@ func _draw_cards() -> void:
 		var selected := i == _index
 		var focus := clampf(1.0 - absf(_shown - i), 0.0, 1.0)
 		var s := 1.0 + 0.06 * focus
-		var center := Vector2(start_x + i * (CARD_SIZE.x + GAP) + CARD_SIZE.x / 2.0, 338 - 10 * focus + (sin(_time * 3.0) * 2.0 if selected else 0.0))
+		var center := Vector2(start_x + i * (CARD_SIZE.x + GAP) + CARD_SIZE.x / 2.0, 322 - 10 * focus + (sin(_time * 3.0) * 2.0 if selected else 0.0))
 		_cards.draw_set_transform(center, 0.0, Vector2(s, s))
 		var rect := Rect2(-CARD_SIZE / 2.0, CARD_SIZE)
 		if selected:
@@ -160,9 +185,13 @@ func _draw_cards() -> void:
 			ItemArt.draw_item(_cards, plate, Vector2.ZERO)
 			_cards.draw_set_transform(center, 0.0, Vector2(s, s))
 			_cards.draw_string(font, Vector2(rect.position.x + 60, y + 7), dishes[k]["name"], HORIZONTAL_ALIGNMENT_LEFT, CARD_SIZE.x - 66, 20, UiStyle.INK)
-		# Melhores estrelas.
+		# Melhores estrelas (ou o recorde, no modo Casa Aberta).
 		var best := GameState.best_stars(level["id"])
-		for k in 3:
+		if GameState.endless:
+			_cards.draw_texture_rect(Art.COIN, Rect2(Vector2(-60, rect.end.y - 44), Vector2(28, 28)), false)
+			_cards.draw_string(font, Vector2(-26, rect.end.y - 22), "Recorde %d" % GameState.best_endless(level["id"]), HORIZONTAL_ALIGNMENT_LEFT, -1, 22, UiStyle.INK)
+			best = -1
+		for k in (3 if best >= 0 else 0):
 			var tex := Art.STAR if k < best else Art.STAR_EMPTY
 			_cards.draw_texture_rect(tex, Rect2(Vector2(-54 + k * 36, rect.end.y - 46) - Vector2(16, 0), Vector2(32, 32)), false)
 		_cards.draw_set_transform(Vector2.ZERO)

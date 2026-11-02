@@ -23,6 +23,9 @@ var mode := Mode.PLAY
 var level := 0
 ## Opção escolhida para cada ajudante (índice em HELPER_PRESETS).
 var helpers: Array = [1, 0]
+## Modo Casa Aberta: sem relógio, abre-se a porta quando se quer e só acaba
+## quando se fecha.
+var endless := false
 var tutorial_done := false
 var last_ip := ""
 ## Mensagem a mostrar no menu (ex. ligação perdida).
@@ -42,6 +45,7 @@ func _ready() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(SAVE_PATH) == OK:
 		tutorial_done = cfg.get_value("progress", "tutorial_done", false)
+		endless = cfg.get_value("progress", "endless", false)
 		last_ip = cfg.get_value("net", "last_ip", "")
 		fullscreen = cfg.get_value("options", "fullscreen", true)
 		music_volume = cfg.get_value("options", "music_volume", 0.5)
@@ -107,6 +111,25 @@ func save_stars(level_id: String, stars: int) -> void:
 func mark_tutorial_done() -> void:
 	tutorial_done = true
 	_save("progress", "tutorial_done", true)
+
+
+func set_endless(on: bool) -> void:
+	endless = on
+	_save("progress", "endless", on)
+
+
+## Recorde do modo Casa Aberta num restaurante.
+func best_endless(level_id: String) -> int:
+	var cfg := ConfigFile.new()
+	cfg.load(SAVE_PATH)
+	return cfg.get_value("endless", level_id, 0)
+
+
+func save_endless(level_id: String, score: int) -> bool:
+	if score <= best_endless(level_id):
+		return false
+	_save("endless", level_id, score)
+	return true
 
 
 func set_helpers(value: Array) -> void:

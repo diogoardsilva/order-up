@@ -45,6 +45,14 @@ var _squash := 0.0
 var _hand := Vector2(0, 11)
 var _held_key := ""
 var _walk_time := 0.0
+## Animações: rasto do dash, passos, trabalhar (cortar/lavar/cobrar) e festejar.
+var _trail: Array[Dictionary] = []
+var _last_step := -1
+var _work_time := 0.0
+var _working := false
+## No fim da ronda os chefs saltam de alegria.
+var celebrate := false
+var _celebrate_time := 0.0
 
 
 func _ready() -> void:
@@ -80,6 +88,26 @@ func _animate(delta: float) -> void:
 	if _screen_speed > 10.0:
 		_walk_time += delta
 	_squash = move_toward(_squash, 0.0, delta * 5.0)
+	# Passos: um som baixinho e pó nos pés a cada passo.
+	var step := int(_walk_time / 0.12) if _screen_speed > 10.0 else -1
+	if step != _last_step and step >= 0:
+		Sfx.play("step1" if step % 2 == 0 else "step2", -20.0 if not is_local else -14.0, 0.15)
+		if Gfx.particles >= 1:
+			kitchen.particles.step_dust(position + Vector2(-3 if step % 2 == 0 else 3, 8))
+	_last_step = step
+	# Dash (em qualquer PC, pela velocidade): imagens fantasma para trás.
+	for t in _trail:
+		t["life"] -= delta
+	_trail = _trail.filter(func(t): return t["life"] > 0.0)
+	if _screen_speed > 200.0 and Gfx.particles >= 1:
+		_trail.append({"pos": position, "life": 0.18})
+	# A trabalhar numa estação (cortar, lavar, cobrar).
+	var target := kitchen.station_at(target_cell()) if kitchen else null
+	_working = use_down and held == null and target != null and target.progress() >= 0.0
+	if _working:
+		_work_time += delta
+	if celebrate:
+		_celebrate_time += delta
 	_hand = _hand.lerp(facing.round() * 9 + Vector2(0, 2), minf(delta * 18.0, 1.0))
 	# Som e "esmagar" quando o que tem na mão muda (funciona igual online).
 	var key := "" if held == null else "%s%s%s%s%d" % [held.kind, held.chopped, held.contents, held.dirty, held.stack]
@@ -145,12 +173,33 @@ func _draw() -> void:
 	var breathe := 0.0 if moving else sin(Time.get_ticks_msec() / 400.0 + slot) * 0.03
 	var top_left := Vector2(-Art.CHEF_FRAME.x / 2.0, -Art.CHEF_FRAME.y + 8 + bob)
 
-	kitchen.draw_actor_shadow(self, Vector2(0, 7), position, 6.0)
+	# Rasto do dash: cópias transparentes na cor do jogador.
+	for t in _trail:
+		var a: float = t["life"] / 0.18 * 0.45
+		var ghost_tl: Vector2 = top_left + (t["pos"] as Vector2) - position
+		Art.frame(self, Art.CHEF_TINT, Art.CHEF_FRAME, col, row, ghost_tl, flip, Color(color, a))
+	# Saltos: ao festejar no fim da ronda e com o emote.
+	var jump := 0.0
+	if celebrate:
+		jump = absf(sin(_celebrate_time * 7.0 + slot)) * 7.0
+	elif emote_left > EMOTE_TIME - 0.35:
+		jump = sin((EMOTE_TIME - emote_left) / 0.35 * PI) * 6.0
+	kitchen.draw_actor_shadow(self, Vector2(0, 7), position, 6.0 - jump * 0.3)
 	# Esmaga e estica a partir dos pés.
 	var sq := sin(_squash * PI) * 0.18
-	draw_set_transform(Vector2(0, 8), 0.0, Vector2(1.0 + sq, 1.0 - sq + breathe))
+	# A trabalhar: o corpo sobe e desce ao ritmo da faca/esponja.
+	var work := absf(sin(_work_time * 18.0)) if _working else 0.0
+	sq += work * 0.07
+	if jump > 0.0:
+		sq -= jump * 0.012
+	draw_set_transform(Vector2(0, 8 - jump), 0.0, Vector2(1.0 + sq, 1.0 - sq + breathe))
 	var tl := top_left - Vector2(0, 8)
-	var hand := _hand + Vector2(0, bob) - Vector2(0, 8)
+	var hand := _hand + Vector2(0, bob) - Vector2(0, 8) + facing.round() * work * 2.0
+	# Ultra: reflexo ténue no chão polido.
+	if Gfx.textures >= 3 and jump == 0.0:
+		draw_set_transform(Vector2(0, 8), 0.0, Vector2(1.0, -0.4))
+		Art.frame(self, Art.CHEF_TINT, Art.CHEF_FRAME, col, row, tl, flip, Color(color, 0.12))
+		draw_set_transform(Vector2(0, 8 - jump), 0.0, Vector2(1.0 + sq, 1.0 - sq + breathe))
 	# De costas, o que leva na mão fica escondido atrás do corpo.
 	if held and row == 1:
 		ItemArt.draw_item(self, held, hand)

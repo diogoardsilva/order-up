@@ -37,14 +37,12 @@ func _ready() -> void:
 		row.add_child(slot)
 		_slots.append(slot)
 
-	var help := PanelContainer.new()
-	help.add_theme_stylebox_override("panel", UiStyle.paper_box())
-	help.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	var help_label := UiStyle.label(
-		"Entrar: Espaço / Enter / Cruz      Trocar de chef: esquerda / direita\n" +
-		"Sair: Shift / - / Círculo      Começar: Esc / Backspace / Options (sem ninguém, volta ao menu)", 20, UiStyle.INK)
-	help.add_child(help_label)
+	# Legendas com os botões desenhados como no comando (ou teclado).
+	var help := PromptBar.new([[&"pick", "Entrar"], [&"move", "Trocar de chef"], [&"dash", "Sair"], [&"pause", "Começar"]])
+	help.custom_minimum_size = Vector2(1280, 44)
 	root.add_child(help)
+	var help2 := UiStyle.label("Sem ninguém no lobby, Começar volta ao menu.", 18, UiStyle.MUTED, 4)
+	root.add_child(help2)
 	_pads_label = UiStyle.label("", 18, UiStyle.MUTED, 6)
 	root.add_child(_pads_label)
 	_room_label = UiStyle.label(_room_text(), 22, UiStyle.GOLD, 6)
