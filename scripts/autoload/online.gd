@@ -93,7 +93,7 @@ func register(index: int, user: String, password: String) -> bool:
 	if not _check_input(user, password):
 		return false
 	var result = await _rpc("ou_register", {"p_username": user.strip_edges(), "p_password": password,
-		"p_name": Profiles.profile_name(index), "p_progress": _export(index), "p_device": OS.get_name()})
+		"p_name": user.strip_edges(), "p_progress": _export(index), "p_device": OS.get_name()})
 	if result is Array and not result.is_empty():
 		_link(index, result[0])
 		message = "Conta criada! Entra com \"%s\" no outro PC para teres o mesmo progresso." % username(index)
@@ -121,7 +121,7 @@ func login(index: int, user: String, password: String) -> bool:
 		return false
 	if result is Array:
 		var row: Dictionary = result[0]
-		Profiles.profiles[index]["name"] = str(row.get("name", Profiles.profile_name(index)))
+		Profiles.profiles[index]["name"] = str(row.get("username", Profiles.profile_name(index))).left(16)
 		_link(index, row)
 		# O boneco da conta ganha ao deste PC.
 		var progress = row.get("progress")
@@ -175,8 +175,8 @@ func _on_profiles_saved() -> void:
 func _check_input(user: String, password: String) -> bool:
 	if not enabled():
 		message = "As contas online não estão ligadas nesta versão."
-	elif not RegEx.create_from_string("^[A-Za-z0-9_.-]{3,20}$").search(user.strip_edges()):
-		message = "O utilizador tem de ter 3 a 20 letras ou números (sem espaços nem acentos)."
+	elif not RegEx.create_from_string("^[A-Za-z0-9_.-]{3,16}$").search(user.strip_edges()):
+		message = "O utilizador tem de ter 3 a 16 letras ou números (sem espaços nem acentos)."
 	elif password.length() < 4:
 		message = "A palavra-passe tem de ter pelo menos 4 letras."
 	else:
@@ -186,6 +186,9 @@ func _check_input(user: String, password: String) -> bool:
 
 
 func _link(index: int, row: Dictionary) -> void:
+	# O perfil passa a ter o nome da conta (e deixa de se poder mudar).
+	if str(row.get("username", "")) != "":
+		Profiles.profiles[index]["name"] = str(row["username"]).left(16)
 	Profiles.profiles[index]["online"] = {"user": str(row.get("username", "")), "token": str(row.get("token", "")),
 		"code": str(row.get("friend_code", ""))}
 	var progress = row.get("progress")

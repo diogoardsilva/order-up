@@ -45,10 +45,14 @@ func _ready() -> void:
 	left.add_child(_name_edit)
 	left.add_child(UiStyle.button("Criar perfil", _create, 340))
 	left.add_child(UiStyle.button("Mudar o nome", func():
-		if not _name_edit.text.strip_edges().is_empty():
-			Profiles.rename(Profiles.active, _name_edit.text)
-			Online.rename(Profiles.active)
+		if Online.logged_in(Profiles.active):
+			Sfx.play("ui_back")
 			_name_edit.text = ""
+			_name_edit.placeholder_text = "Com conta online, o nome é o da conta"
+		elif not _name_edit.text.strip_edges().is_empty():
+			Profiles.rename(Profiles.active, _name_edit.text)
+			_name_edit.text = ""
+			_name_edit.placeholder_text = "Nome do perfil novo"
 			_refresh(), 340))
 	left.add_child(UiStyle.button("Apagar este perfil", func():
 		Profiles.remove(Profiles.active)
@@ -131,7 +135,7 @@ func _refresh() -> void:
 	for i in Profiles.profiles.size():
 		var p: Dictionary = Profiles.profiles[i]
 		var mark := "● " if i == Profiles.active else "   "
-		var cloud := "  · online" if Online.logged_in(i) else ""
+		var cloud := "  · online" if Online.logged_in(i) else "  · local"
 		var b := UiStyle.button("%s%s  (%d)%s" % [mark, p["name"], Profiles.unlocked_count(i), cloud], func():
 			Profiles.active = i
 			Profiles.save()

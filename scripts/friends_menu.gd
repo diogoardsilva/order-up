@@ -49,7 +49,7 @@ func _ready() -> void:
 	col.add_child(_login_box)
 	_user_edit = LineEdit.new()
 	_user_edit.placeholder_text = "Utilizador (ex. diogo)"
-	_user_edit.max_length = 20
+	_user_edit.max_length = 16
 	_user_edit.custom_minimum_size = Vector2(620, 54)
 	_login_box.add_child(_user_edit)
 	_pass_edit = LineEdit.new()
@@ -182,9 +182,9 @@ func _refresh_header() -> void:
 	if not Online.enabled():
 		_code_label.text = "As contas online não estão ligadas nesta versão."
 	elif not logged:
-		_code_label.text = "Perfil %s: entra na tua conta ou cria uma." % Profiles.profile_name(Profiles.active)
+		_code_label.text = "Perfil local %s: entra numa conta online ou cria uma. O perfil passa a ter o nome da conta." % Profiles.profile_name(Profiles.active)
 	else:
-		_code_label.text = "%s (utilizador %s)  ·  código de amigo  %s" % [Profiles.profile_name(Profiles.active), Online.username(), Online.friend_code()]
+		_code_label.text = "Conta %s  ·  código de amigo  %s" % [Online.username(), Online.friend_code()]
 	_msg.text = Online.message
 
 
@@ -192,7 +192,7 @@ func _refresh_list() -> void:
 	for c in _list.get_children():
 		c.queue_free()
 	if Online.friends.is_empty():
-		_list.add_child(UiStyle.label("Ainda não tens amigos. Dá o teu código (ou o teu utilizador) à Bibs, à Nenas ou ao Afonso e escreve o deles aqui em cima.", 20, UiStyle.INK_SOFT))
+		_list.add_child(UiStyle.label("Ainda não tens amigos. Para te adicionarem, dá o teu código de amigo (%s) ou o teu utilizador (%s). Para adicionares alguém, escreve o código ou o utilizador dessa pessoa aqui em cima." % [Online.friend_code(), Online.username()], 20, UiStyle.INK_SOFT))
 		(_list.get_child(-1) as Label).autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		return
 	for f in Online.friends:

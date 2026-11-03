@@ -76,6 +76,9 @@ func create(name: String, select := true) -> int:
 
 
 func rename(index: int, name: String) -> void:
+	# Um perfil com conta online tem sempre o nome da conta.
+	if index >= 0 and index < profiles.size() and str(profiles[index].get("online", {}).get("token", "")) != "":
+		return
 	if index >= 0 and index < profiles.size() and not name.strip_edges().is_empty():
 		profiles[index]["name"] = name.strip_edges().left(16)
 		save()
