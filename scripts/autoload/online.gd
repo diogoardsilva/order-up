@@ -26,6 +26,8 @@ var _beat := HEARTBEAT_EVERY - 3.0
 ## Perfis com mudanças por enviar -> segundos desde a última mudança.
 var _pending := {}
 var _syncing := {}
+## De 2 em 2 minutos vai buscar o que mudou noutro PC.
+var _pull := 0.0
 
 
 func enabled() -> bool:
@@ -48,6 +50,12 @@ func _process(delta: float) -> void:
 	if _beat >= HEARTBEAT_EVERY:
 		_beat = 0.0
 		heartbeat()
+	_pull += delta
+	if _pull >= 120.0:
+		_pull = 0.0
+		for i in Profiles.profiles.size():
+			if logged_in(i) and not _pending.has(i):
+				sync(i)
 	for i in _pending.keys():
 		_pending[i] += delta
 		if _pending[i] >= SYNC_DELAY:
@@ -60,7 +68,10 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
 		for i in _pending.keys():
 			if logged_in(i):
-				_rpc("ou_save", {"p_token": token(i), "p_name": Profiles.profile_name(i), "p_progress": _export(i)}, true)
+				# Sem o boneco: pode haver um mais recente na conta.
+				var progress := _export(i)
+				progress.erase("look")
+				_rpc("ou_save", {"p_token": token(i), "p_name": Profiles.profile_name(i), "p_progress": progress}, true)
 
 
 # --- Conta ---------------------------------------------------------------------
@@ -123,10 +134,10 @@ func login(index: int, user: String, password: String) -> bool:
 		var row: Dictionary = result[0]
 		Profiles.profiles[index]["name"] = str(row.get("username", Profiles.profile_name(index))).left(16)
 		_link(index, row)
-		# O boneco da conta ganha ao deste PC.
+		# Ao entrar, o boneco da conta ganha ao deste PC (se não for mais antigo).
 		var progress = row.get("progress")
-		if progress is Dictionary and progress.get("look") is Dictionary and not (progress["look"] as Dictionary).is_empty():
-			Profiles.profiles[index]["look"] = CharacterLook.clean(progress["look"])
+		if progress is Dictionary:
+			_import(index, progress, true)
 		await sync(index)
 		message = "Entraste como %s. O progresso está junto." % Profiles.profile_name(index)
 		status_changed.emit()
@@ -157,6 +168,15 @@ func sync(index := Profiles.active) -> void:
 	_syncing[index] = true
 	_pending.erase(index)
 	var t := token(index)
+	# Primeiro traz o que está na conta (o boneco mais recente ganha), depois
+	# envia tudo junto. Sem isto, cada PC escrevia o seu boneco por cima.
+	var current = await _rpc("ou_load", {"p_token": t}, true)
+	if index < Profiles.profiles.size() and token(index) == t and current is Array and not current.is_empty() \
+			and current[0].get("progress") is Dictionary:
+		_import(index, current[0]["progress"])
+	if index >= Profiles.profiles.size() or token(index) != t:
+		_syncing.erase(index)
+		return
 	var result = await _rpc("ou_save", {"p_token": t, "p_name": Profiles.profile_name(index), "p_progress": _export(index)}, true)
 	_syncing.erase(index)
 	# O perfil pode ter sido apagado ou mudado entretanto.
@@ -208,7 +228,7 @@ func _export(index: int) -> Dictionary:
 
 ## Junta o progresso que veio da conta ao deste perfil (sem avisos de conquista:
 ## essas já foram ganhas noutro sítio).
-func _import(index: int, progress: Dictionary) -> void:
+func _import(index: int, progress: Dictionary, prefer_remote_look := false) -> void:
 	var p: Dictionary = Profiles.profiles[index]
 	var changed := false
 	var stats = progress.get("stats")
@@ -224,6 +244,17 @@ func _import(index: int, progress: Dictionary) -> void:
 			if not p["unlocked"].has(k):
 				p["unlocked"][k] = int(unlocked[k])
 				changed = true
+	# O boneco: fica o que foi mudado há menos tempo. Ao entrar, o da conta.
+	var look = progress.get("look")
+	if look is Dictionary and not (look as Dictionary).is_empty():
+		var mine: Dictionary = p.get("look", {})
+		# Empate (bonecos de antes da 0.5.6, sem data): ganha o da conta.
+		if prefer_remote_look or int(look.get("t", 0)) >= int(mine.get("t", 0)):
+			var clean := CharacterLook.clean(look)
+			if clean != mine:
+				p["look"] = clean
+				changed = true
+				PlayerRegistry.refresh_looks()
 	if changed:
 		Profiles.save(false)
 

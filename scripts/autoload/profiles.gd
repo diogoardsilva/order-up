@@ -26,6 +26,7 @@ var round_stats := {}
 var _dirty := false
 var _save_time := 0.0
 var _toast: Toast
+var _pc_records_done := false
 
 
 func _ready() -> void:
@@ -35,6 +36,7 @@ func _ready() -> void:
 		if name.is_empty():
 			name = OS.get_environment("USER")
 		create(name.capitalize() if not name.is_empty() else "Chef", false)
+	_copy_pc_records()
 	var layer := CanvasLayer.new()
 	layer.layer = 50
 	add_child(layer)
@@ -262,6 +264,27 @@ func _load() -> void:
 			"look": CharacterLook.clean(cfg.get_value(section, "look", CharacterLook.preset(i))),
 			"online": cfg.get_value(section, "online", {})})
 	active = clampi(cfg.get_value("meta", "active", 0), 0, maxi(profiles.size() - 1, 0))
+	_pc_records_done = cfg.get_value("meta", "pc_records", false)
+
+
+## Uma vez: as estrelas, os recordes e o tutorial guardados neste PC (antes de
+## haver perfis) passam para o perfil ativo, para irem também para a conta.
+func _copy_pc_records() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(SAVE_PATH) == OK and cfg.get_value("meta", "pc_records", false):
+		return
+	var pc := ConfigFile.new()
+	if pc.load("user://save.cfg") == OK and active < profiles.size():
+		var s: Dictionary = profiles[active]["stats"]
+		for section in ["stars", "endless"]:
+			if pc.has_section(section):
+				for level_id in pc.get_section_keys(section):
+					var stat := "lv_%s_%s_best" % [level_id, section]
+					s[stat] = maxi(int(s.get(stat, 0)), int(pc.get_value(section, level_id, 0)))
+		if pc.get_value("progress", "tutorial_done", false):
+			s["tutorial"] = maxi(int(s.get("tutorial", 0)), 1)
+	_pc_records_done = true
+	save(false)
 
 
 ## O boneco de um perfil (o dos convidados é um dos predefinidos).
@@ -273,7 +296,9 @@ func look(index: int, fallback := 0) -> Dictionary:
 
 func set_look(index: int, value: Dictionary) -> void:
 	if index >= 0 and index < profiles.size():
-		profiles[index]["look"] = CharacterLook.clean(value)
+		var look := CharacterLook.clean(value)
+		look["t"] = int(Time.get_unix_time_from_system())
+		profiles[index]["look"] = look
 		save()
 
 
@@ -281,6 +306,7 @@ func save(progress_changed := true) -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("meta", "count", profiles.size())
 	cfg.set_value("meta", "active", active)
+	cfg.set_value("meta", "pc_records", _pc_records_done)
 	for i in profiles.size():
 		var section := "p%d" % i
 		cfg.set_value(section, "name", profiles[i]["name"])

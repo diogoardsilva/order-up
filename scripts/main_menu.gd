@@ -387,7 +387,7 @@ func _start_tutorial() -> void:
 ## Na primeira vez que se joga, o jogo começa pelo tutorial.
 func _start_local() -> void:
 	Net.leave()
-	GameState.mode = GameState.Mode.PLAY if GameState.tutorial_done else GameState.Mode.TUTORIAL
+	GameState.mode = GameState.Mode.PLAY if GameState.tutorial_done or int(Profiles.profiles[Profiles.active]["stats"].get("tutorial", 0)) > 0 else GameState.Mode.TUTORIAL
 	Transition.go("res://scenes/lobby.tscn")
 
 

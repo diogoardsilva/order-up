@@ -130,7 +130,8 @@ func _apply_volumes() -> void:
 func best_stars(level_id: String) -> int:
 	var cfg := ConfigFile.new()
 	cfg.load(SAVE_PATH)
-	return cfg.get_value("stars", level_id, 0)
+	# As estrelas também ficam no perfil (e na conta online).
+	return maxi(cfg.get_value("stars", level_id, 0), _profile_stat("lv_%s_stars_best" % level_id))
 
 
 func save_stars(level_id: String, stars: int) -> void:
@@ -140,6 +141,9 @@ func save_stars(level_id: String, stars: int) -> void:
 
 func mark_tutorial_done() -> void:
 	tutorial_done = true
+	var profiles := get_node_or_null("/root/Profiles")
+	if profiles:
+		profiles.add_all("tutorial", 1)
 	_save("progress", "tutorial_done", true)
 
 
@@ -167,7 +171,7 @@ func set_endless(on: bool) -> void:
 func best_endless(level_id: String) -> int:
 	var cfg := ConfigFile.new()
 	cfg.load(SAVE_PATH)
-	return cfg.get_value("endless", level_id, 0)
+	return maxi(cfg.get_value("endless", level_id, 0), _profile_stat("lv_%s_endless_best" % level_id))
 
 
 func save_endless(level_id: String, score: int) -> bool:
@@ -185,6 +189,13 @@ func set_helpers(value: Array) -> void:
 func remember_ip(ip: String) -> void:
 	last_ip = ip
 	_save("net", "last_ip", ip)
+
+
+func _profile_stat(stat: String) -> int:
+	var profiles := get_node_or_null("/root/Profiles")
+	if profiles == null or profiles.active >= profiles.profiles.size():
+		return 0
+	return int(profiles.profiles[profiles.active]["stats"].get(stat, 0))
 
 
 func _save(section: String, key: String, value: Variant) -> void:

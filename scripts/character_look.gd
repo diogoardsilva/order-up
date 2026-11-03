@@ -219,6 +219,9 @@ static func clean(look: Variant) -> Dictionary:
 	for k in sizes:
 		if src.has(k):
 			out[k] = posmod(int(src[k]), sizes[k])
+	# Quando foi mudado (para a conta online saber qual é o mais recente).
+	if src.has("t"):
+		out["t"] = int(src["t"])
 	return out
 
 
