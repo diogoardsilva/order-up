@@ -9,6 +9,7 @@ const ENTRIES: Array = [
 	["0.6.2", [
 		"Quando um grupo se vai embora sem comer, já dá para levantar o prato que ficou na mesa e deitá-lo fora.",
 		"O nome de cada jogador aparece por cima do boneco.",
+		"Os ajudantes cozinheiros fazem dose dupla quando há dois pedidos do mesmo prato.",
 		"Botão Novidades no menu, com esta lista.",
 	]],
 	["0.6.1", [
