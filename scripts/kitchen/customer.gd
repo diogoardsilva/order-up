@@ -23,6 +23,10 @@ const COLORS: Array[Color] = [Color("8e7cc3"), Color("e69138"), Color("6fa8dc"),
 var table: TableStation
 ## Um prato por pessoa.
 var recipes: Array[Dictionary] = []
+## Bebidas pedidas (algumas pessoas pedem uma).
+var drinks: Array[Dictionary] = []
+## Multiplicador da paciência (dificuldade).
+var patience_scale := 1.0
 var state := State.ARRIVING
 ## Pessoas do grupo: a primeira é quem vai pagar.
 var members: Array[Member] = []
@@ -113,6 +117,7 @@ func is_seated() -> bool:
 ## Pratos que ainda faltam levar à mesa.
 func missing() -> Array[Dictionary]:
 	var left: Array[Dictionary] = recipes.duplicate()
+	left.append_array(drinks)
 	for item in table.items:
 		var r := Recipes.match_plate(item.contents)
 		for i in left.size():
@@ -132,6 +137,23 @@ func points() -> int:
 	var total := tip
 	for r in recipes:
 		total += r["points"]
+	for r in drinks:
+		total += r["points"]
+	return total
+
+
+## Pontos do que já chegou à mesa (pagam isso mesmo que se vão embora antes).
+func delivered_points() -> int:
+	var total := 0
+	var wanted: Array[Dictionary] = recipes.duplicate()
+	wanted.append_array(drinks)
+	for item in table.items:
+		var r := Recipes.match_plate(item.contents)
+		for i in wanted.size():
+			if wanted[i]["id"] == r.get("id"):
+				total += wanted[i]["points"]
+				wanted.remove_at(i)
+				break
 	return total
 
 
@@ -151,6 +173,8 @@ func serve(p_tip: int) -> void:
 ## Acabaram de comer: quem paga vai para a fila da caixa, os outros saem.
 func go_pay(kitchen: Kitchen, queue_index: int) -> void:
 	state = State.TO_REGISTER
+	# Os copos voltam sozinhos para o bar; os pratos ficam sujos na mesa.
+	table.items.assign(table.items.filter(func(i: Item): return not i.is_glass()))
 	for item in table.items:
 		item.contents.clear()
 		item.dirty = true
@@ -192,7 +216,8 @@ func leave(kitchen: Kitchen, from_register := -1) -> void:
 
 func serialize() -> Array:
 	var people := members.map(func(m: Member): return [m.pos, not m.path.is_empty() and m.delay <= 0.0, m.look, m.color, m.gone, m.seat])
-	return [id, table.cell, recipes.map(func(r): return r["id"]), state, people, patience, max_patience, angry]
+	return [id, table.cell, recipes.map(func(r): return r["id"]), state, people, patience, max_patience, angry,
+		drinks.map(func(r): return r["id"])]
 
 
 ## Cria ou atualiza (nos outros PCs) um grupo com o estado do anfitrião.
@@ -217,6 +242,8 @@ static func from_net(data: Array, existing: Customer, p_table: TableStation) -> 
 	customer.patience = data[5]
 	customer.max_patience = data[6]
 	customer.angry = data[7]
+	if data.size() > 8:
+		customer.drinks.assign(data[8].map(func(rid): return Recipes.by_id(rid)))
 	return customer
 
 
@@ -273,6 +300,7 @@ func finished_eating() -> bool:
 
 
 func _set_patience(seconds: float) -> void:
+	seconds *= patience_scale
 	max_patience = seconds
 	patience = seconds
 

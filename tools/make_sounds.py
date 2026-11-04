@@ -206,6 +206,84 @@ def main():
     save("music_menu", music(7, 72, [[60, 64, 67, 71], [57, 60, 64, 67], [62, 65, 69, 72], [55, 59, 62, 65]]), 0.5)
     save("music", music(3, 84, [[65, 69, 72, 76], [64, 67, 71, 74], [62, 65, 69, 72], [60, 64, 67, 71],
                                 [65, 69, 72, 76], [64, 67, 71, 74], [62, 65, 69, 72], [67, 71, 74, 77]]), 0.5)
+
+    # --- v0.5.1: mais sons para tudo o que mexe ---
+    def lowpass(x, k):
+        return np.convolve(x, np.ones(k) / k, mode="same")
+
+    for i, f in enumerate((95, 120)):
+        thump = osc(sweep(f * 1.6, f, 0.07), 0.07, "sine") * env(int(RATE * 0.07), curve=7)
+        save("step%d" % (i + 1), mix(thump, lowpass(noise(0.05), 10) * env(int(RATE * 0.05), curve=12) * 0.6), 0.22)
+    save("door", seq(bell(1568, 0.35, ((1, 1.0), (2.0, 0.3), (3.0, 0.1))), bell(1175, 0.8, ((1, 1.0), (2.0, 0.3), (3.0, 0.1)))), 0.38)
+    drawer = mix(noise(0.06, 3) * env(int(RATE * 0.06), curve=10), osc(sweep(300, 120, 0.08), 0.08, "square") * env(int(RATE * 0.08), curve=6) * 0.4)
+    jingle = np.zeros(int(RATE * 0.5))
+    for k in range(9):
+        c = bell(rng.uniform(3000, 5200), 0.18, ((1, 1.0), (1.5, 0.4)))
+        i = int(rng.uniform(0.0, 0.3) * RATE)
+        jingle[i:i + len(c)] += c[:len(jingle) - i] * rng.uniform(0.2, 0.5)
+    save("kaching", seq(drawer, mix(bell(2637, 0.7), jingle)), 0.5)
+    save("served", seq(*[bell(note_freq(n), 0.16) for n in (76, 79)], bell(note_freq(84), 0.7)), 0.45)
+    t = t_of(0.45)
+    grumble = osc(110 + 25 * np.sin(2 * np.pi * 9 * t), 0.45, "square") * env(len(t), attack=0.03, curve=2)
+    save("angry", lowpass(grumble, 6), 0.35)
+    t = t_of(0.25)
+    save("happy", osc(sweep(330, 520, 0.25) * (1 + 0.04 * np.sin(2 * np.pi * 18 * t)), 0.25, "triangle") * env(len(t), attack=0.03, curve=3), 0.35)
+    w = noise(0.28, 1)
+    w = lowpass(w, 3) - lowpass(w, 30)
+    save("throw", w * np.sin(np.linspace(0, np.pi, len(w))) ** 2, 0.3)
+    save("catch", mix(osc(sweep(260, 140, 0.08), 0.08, "sine") * env(int(RATE * 0.08), curve=5), noise(0.03, 4) * env(int(RATE * 0.03), curve=10) * 0.4), 0.45)
+    save("achievement", mix(seq(*[bell(note_freq(n), 0.12) for n in (79, 83, 86)], bell(note_freq(91), 1.0)),
+        seq(*[blip(note_freq(n), 0.12, "triangle", 4) for n in (67, 71, 74)], blip(note_freq(79), 0.9, "triangle", 2)) * 0.5), 0.45)
+    plop = osc(sweep(200, 900, 0.07), 0.07, "sine") * env(int(RATE * 0.07), curve=4)
+    save("splash", mix(plop, lowpass(noise(0.2), 4) * env(int(RATE * 0.2), curve=5) * 0.5), 0.45)
+    save("step_done", seq(*[blip(note_freq(n), 0.07, "triangle", 5) for n in (79, 84, 88)], blip(note_freq(91), 0.25, "triangle", 4)), 0.4)
+    save("count", blip(880, 0.14, "square", 4), 0.3)
+    save("go", mix(blip(1320, 0.45, "square", 3), blip(660, 0.45, "triangle", 3)), 0.35)
+    sparkle = np.zeros(int(RATE * 0.6))
+    for k in range(12):
+        c = bell(rng.uniform(2500, 6000), 0.2, ((1, 1.0),))
+        i = int(k * 0.035 * RATE)
+        sparkle[i:i + len(c)] += c[:len(sparkle) - i] * (1 - k / 14)
+    save("sparkle", sparkle, 0.35)
+    save("star", mix(bell(note_freq(84), 0.8), bell(note_freq(88), 0.8) * 0.7, bell(note_freq(91), 0.8) * 0.5, sparkle[:int(RATE * 0.6)] * 0.4), 0.5)
+    save("pop", osc(sweep(500, 1100, 0.06), 0.06, "sine") * env(int(RATE * 0.06), curve=5), 0.35)
+    save("swoosh", (lambda x: (lowpass(x, 4) - lowpass(x, 40)) * np.sin(np.linspace(0, np.pi, len(x))))(noise(0.22)), 0.25)
+    lid = np.zeros(int(RATE * 0.35))
+    for k in range(5):
+        c = bell(rng.uniform(1700, 2100), 0.08, ((1, 1.0), (2.3, 0.5)))
+        i = int(k * 0.06 * RATE)
+        lid[i:i + len(c)] += c[:len(lid) - i]
+    save("lid", lid, 0.25)
+    save("burn", mix(lowpass(noise(0.6), 2) * env(int(RATE * 0.6), attack=0.1, curve=2), osc(sweep(200, 90, 0.6), 0.6, "square") * env(int(RATE * 0.6), curve=3) * 0.3), 0.35)
+    # Burburinho do salão (loop): vozes abafadas (ruído filtrado com "sílabas") e
+    # um ou outro talher.
+    n = int(RATE * 8.0)
+    talk = np.zeros(n)
+    for _ in range(70):
+        dur = rng.uniform(0.15, 0.5)
+        f = rng.uniform(150, 320)
+        tt = t_of(dur)
+        syl = osc(f * (1 + 0.08 * np.sin(2 * np.pi * rng.uniform(3, 7) * tt)), dur, "triangle")
+        syl = lowpass(syl, 8) * np.sin(np.linspace(0, np.pi, len(tt)))
+        i = rng.integers(0, n - len(syl))
+        talk[i:i + len(syl)] += syl * rng.uniform(0.2, 0.6)
+    room = lowpass(noise(8.0), 40) * 0.6
+    for _ in range(10):
+        c = bell(rng.uniform(2500, 4200), 0.15, ((1, 1.0), (1.7, 0.4))) * rng.uniform(0.15, 0.35)
+        i = rng.integers(0, n - len(c))
+        talk[i:i + len(c)] += c
+    amb = talk + room
+    # Cruzar o fim com o início para o loop não se notar.
+    x = int(RATE * 0.5)
+    amb[:x] = amb[:x] * np.linspace(0, 1, x) + amb[-x:] * np.linspace(1, 0, x)
+    amb = amb[:-x]
+    data = amb / np.max(np.abs(amb)) * 0.5
+    pcm = (data * 32767).astype(np.int16)
+    with wave.open(str(OUT / "murmur.wav"), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(RATE)
+        wf.writeframes(pcm.tobytes())
     print("Sons escritos em", OUT)
 
 

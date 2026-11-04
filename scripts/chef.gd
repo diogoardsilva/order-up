@@ -6,6 +6,9 @@ extends CharacterBody2D
 
 signal pause_requested
 signal confirm_pressed
+## No ecrã do fim: ○ volta à escolha do nível e △ repete.
+signal back_pressed
+signal retry_pressed
 signal interact_requested
 signal throw_requested
 
@@ -32,8 +35,11 @@ var facing := Vector2.DOWN
 var emote_left := 0.0
 ## Última posição recebida pela rede (chefs remotos).
 var net_target := Vector2.ZERO
-## Índice do personagem escolhido no lobby (Art.CHEFS).
-var character := 0
+## Boneco (CharacterLook) e roupa (a função: 0 Livre ... 5 Barman).
+var look: Dictionary = CharacterLook.preset(0)
+var outfit := 0
+## Nome do jogador, por cima da cabeça (vazio nos ajudantes).
+var player_name := ""
 
 var _dash_left := 0.0
 var _dash_cooldown := 0.0
@@ -45,10 +51,22 @@ var _squash := 0.0
 var _hand := Vector2(0, 11)
 var _held_key := ""
 var _walk_time := 0.0
+## Animações: rasto do dash, passos, trabalhar (cortar/lavar/cobrar) e festejar.
+var _trail: Array[Dictionary] = []
+var _last_step := -1
+var _work_time := 0.0
+var _working := false
+## No fim da ronda os chefs saltam de alegria.
+var celebrate := false
+var _celebrate_time := 0.0
 
 
 func _ready() -> void:
 	net_target = position
+	# Os chefs mexem-se ao ritmo da física (60 por segundo); com mais FPS
+	# o desenho fica entre dois passos, para andarem suaves (ver GameState).
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
+	reset_physics_interpolation.call_deferred()
 	var shape := RectangleShape2D.new()
 	shape.size = Vector2(SIZE, SIZE) * 0.8
 	var col := CollisionShape2D.new()
@@ -67,8 +85,11 @@ func _physics_process(delta: float) -> void:
 		_local_update(delta)
 	else:
 		# Segue a posição da rede com suavização; salta se estiver muito longe.
-		position = net_target if position.distance_to(net_target) > Kitchen.TILE * 2 \
-			else position.lerp(net_target, 0.35)
+		if position.distance_to(net_target) > Kitchen.TILE * 2:
+			position = net_target
+			reset_physics_interpolation()
+		else:
+			position = position.lerp(net_target, 0.35)
 	emote_left = maxf(emote_left - delta, 0.0)
 	_animate(delta)
 	queue_redraw()
@@ -80,9 +101,29 @@ func _animate(delta: float) -> void:
 	if _screen_speed > 10.0:
 		_walk_time += delta
 	_squash = move_toward(_squash, 0.0, delta * 5.0)
+	# Passos: um som baixinho e pó nos pés a cada passo.
+	var step := int(_walk_time / 0.12) if _screen_speed > 10.0 else -1
+	if step != _last_step and step >= 0:
+		Sfx.play("step1" if step % 2 == 0 else "step2", -20.0 if not is_local else -14.0, 0.15)
+		if Gfx.particles >= 1:
+			kitchen.particles.step_dust(position + Vector2(-3 if step % 2 == 0 else 3, 8))
+	_last_step = step
+	# Dash (em qualquer PC, pela velocidade): imagens fantasma para trás.
+	for t in _trail:
+		t["life"] -= delta
+	_trail = _trail.filter(func(t): return t["life"] > 0.0)
+	if _screen_speed > 200.0 and Gfx.particles >= 1:
+		_trail.append({"pos": position, "life": 0.18})
+	# A trabalhar numa estação (cortar, lavar, cobrar).
+	var target := kitchen.station_at(target_cell()) if kitchen else null
+	_working = use_down and held == null and target != null and target.progress() >= 0.0
+	if _working:
+		_work_time += delta
+	if celebrate:
+		_celebrate_time += delta
 	_hand = _hand.lerp(facing.round() * 9 + Vector2(0, 2), minf(delta * 18.0, 1.0))
 	# Som e "esmagar" quando o que tem na mão muda (funciona igual online).
-	var key := "" if held == null else "%s%s%s%s%d" % [held.kind, held.chopped, held.contents, held.dirty, held.stack]
+	var key := "" if held == null else "%s%s%s%s%d%d" % [held.kind, held.chopped, held.contents, held.dirty, held.stack, held.count]
 	if key != _held_key:
 		if _held_key == "":
 			Sfx.play("pickup")
@@ -103,6 +144,10 @@ func _local_update(delta: float) -> void:
 		use_down = false
 		if source.just_pressed(&"pick"):
 			confirm_pressed.emit()
+		elif source.just_pressed(&"dash"):
+			back_pressed.emit()
+		elif source.just_pressed(&"throw"):
+			retry_pressed.emit()
 		return
 
 	var input := source.move
@@ -114,6 +159,8 @@ func _local_update(delta: float) -> void:
 		_dash_left = DASH_TIME
 		_dash_cooldown = DASH_COOLDOWN
 		Sfx.play("dash")
+		if not source is BotSource:
+			Profiles.add("dashes")
 		for i in 6:
 			kitchen.particles.dust(position + Vector2(randf_range(-5, 5), 6), -facing)
 
@@ -131,6 +178,8 @@ func _local_update(delta: float) -> void:
 		throw_requested.emit()
 	if source.just_pressed(&"emote"):
 		emote_left = EMOTE_TIME
+		if not source is BotSource:
+			Profiles.add("emotes")
 
 
 func _draw() -> void:
@@ -145,17 +194,41 @@ func _draw() -> void:
 	var breathe := 0.0 if moving else sin(Time.get_ticks_msec() / 400.0 + slot) * 0.03
 	var top_left := Vector2(-Art.CHEF_FRAME.x / 2.0, -Art.CHEF_FRAME.y + 8 + bob)
 
-	kitchen.draw_actor_shadow(self, Vector2(0, 7), position, 6.0)
+	# Rasto do dash: cópias transparentes na cor do jogador.
+	for t in _trail:
+		var a: float = t["life"] / 0.18 * 0.45
+		var ghost_tl: Vector2 = top_left + (t["pos"] as Vector2) - position
+		CharacterLook.draw_silhouette(self, look, outfit, col, row, ghost_tl, flip, Color(color, a))
+	# Saltos: ao festejar no fim da ronda e com o emote.
+	var jump := 0.0
+	if celebrate:
+		jump = absf(sin(_celebrate_time * 7.0 + slot)) * 7.0
+	elif emote_left > EMOTE_TIME - 0.35:
+		jump = sin((EMOTE_TIME - emote_left) / 0.35 * PI) * 6.0
+	kitchen.draw_actor_shadow(self, Vector2(0, 7), position, 6.0 - jump * 0.3)
+	# Anel na cor do jogador, aos pés (para se saber quem é quem).
+	draw_set_transform(Vector2(0, 7), 0.0, Vector2(1.0, 0.45))
+	draw_arc(Vector2.ZERO, 8.0, 0.0, TAU, 20, Color(color, 0.75), 1.6)
+	draw_set_transform(Vector2.ZERO)
 	# Esmaga e estica a partir dos pés.
 	var sq := sin(_squash * PI) * 0.18
-	draw_set_transform(Vector2(0, 8), 0.0, Vector2(1.0 + sq, 1.0 - sq + breathe))
+	# A trabalhar: o corpo sobe e desce ao ritmo da faca/esponja.
+	var work := absf(sin(_work_time * 18.0)) if _working else 0.0
+	sq += work * 0.07
+	if jump > 0.0:
+		sq -= jump * 0.012
+	draw_set_transform(Vector2(0, 8 - jump), 0.0, Vector2(1.0 + sq, 1.0 - sq + breathe))
 	var tl := top_left - Vector2(0, 8)
-	var hand := _hand + Vector2(0, bob) - Vector2(0, 8)
+	var hand := _hand + Vector2(0, bob) - Vector2(0, 8) + facing.round() * work * 2.0
+	# Ultra: reflexo ténue no chão polido.
+	if Gfx.textures >= 3 and jump == 0.0:
+		draw_set_transform(Vector2(0, 8), 0.0, Vector2(1.0, -0.4))
+		CharacterLook.draw_silhouette(self, look, outfit, col, row, tl, flip, Color(color, 0.12))
+		draw_set_transform(Vector2(0, 8 - jump), 0.0, Vector2(1.0 + sq, 1.0 - sq + breathe))
 	# De costas, o que leva na mão fica escondido atrás do corpo.
 	if held and row == 1:
 		ItemArt.draw_item(self, held, hand)
-	Art.frame(self, Art.CHEFS[character], Art.CHEF_FRAME, col, row, tl, flip)
-	Art.frame(self, Art.CHEF_TINT, Art.CHEF_FRAME, col, row, tl, flip, color)
+	CharacterLook.draw(self, look, outfit, col, row, tl, flip)
 	if held and row != 1:
 		ItemArt.draw_item(self, held, hand)
 	draw_set_transform(Vector2.ZERO)
@@ -164,6 +237,11 @@ func _draw() -> void:
 	# Marcador do jogador: um triângulo na cor dele.
 	var tip := Vector2(0, top_left.y - 3 + sin(Time.get_ticks_msec() / 250.0) * 1.0).round()
 	draw_colored_polygon(PackedVector2Array([tip, tip + Vector2(-3, -4), tip + Vector2(3, -4)]), color)
+	# O nome do jogador, para se saber quem é quem.
+	if player_name != "":
+		var at := Vector2(-40, tip.y - 6)
+		draw_string_outline(font, at, player_name, HORIZONTAL_ALIGNMENT_CENTER, 80, 10, 3, Color(0.1, 0.05, 0.05, 0.85))
+		draw_string(font, at, player_name, HORIZONTAL_ALIGNMENT_CENTER, 80, 10, color.lightened(0.35))
 	if emote_left > 0.0:
 		var pop := 1.0 + maxf(0.0, emote_left - EMOTE_TIME + 0.15) * 4.0
 		draw_set_transform(Vector2(0, top_left.y - 10), 0.0, Vector2(pop, pop))

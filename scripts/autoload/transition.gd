@@ -7,6 +7,7 @@ var _busy := false
 
 func _ready() -> void:
 	layer = 100
+	set_meta("full_screen", true)
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_rect.color = Color(0.1, 0.05, 0.06, 0.0)
 	_rect.set_anchors_preset(Control.PRESET_FULL_RECT)

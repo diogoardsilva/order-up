@@ -36,24 +36,30 @@ func combine(held: Item) -> Item:
 		held.second = item
 		item = null
 		return held
+	# Ingredientes iguais juntam-se na mão (ex. 2 queijos), até caberem.
+	if held.can_merge(item):
+		held.count += item.count
+		item = null
+		return held
 	if held.is_cookware():
 		if item.is_plate():
 			held.pour_into(item)
-		elif item.is_ingredient() and held.cook_add(item.content_id()):
-			item = null
+		elif item.is_ingredient():
+			item = held.cook_add_all(item)
 		return held
 	if item.is_cookware():
 		if held.is_plate():
 			item.pour_into(held)
 			return held
-		if held.is_ingredient() and item.cook_add(held.content_id()):
-			return null
+		if held.is_ingredient():
+			return item.cook_add_all(held)
 		return held
-	# Combinar ingrediente e prato, em qualquer das direções.
+	# Combinar ingrediente e prato, em qualquer das direções (vai um de cada vez).
 	if item.is_plate() and held.is_ingredient() and item.try_add(held.content_id()):
-		return null
+		return held if held.take_one() else null
 	if held.is_plate() and item.is_ingredient() and held.try_add(item.content_id()):
-		item = null
+		if not item.take_one():
+			item = null
 	return held
 
 
@@ -61,6 +67,10 @@ func combine(held: Item) -> Item:
 func catch(thrown: Item) -> bool:
 	if item == null:
 		item = thrown
+		return true
+	# Atirado para cima de ingredientes iguais: junta-se a eles.
+	if item.can_merge(thrown):
+		item.count += thrown.count
 		return true
 	return combine(thrown) == null
 

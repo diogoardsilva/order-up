@@ -5,16 +5,7 @@ extends InputSource
 ## Quadrado = X, Triângulo = Y, L1 = LB, Options = Start.
 
 const DEADZONE := 0.25
-const BUTTONS := {
-	&"pick": JOY_BUTTON_A,
-	&"use": JOY_BUTTON_X,
-	&"dash": JOY_BUTTON_B,
-	&"throw": JOY_BUTTON_Y,
-	&"emote": JOY_BUTTON_LEFT_SHOULDER,
-	&"pause": JOY_BUTTON_START,
-}
-const PS_NAMES := {&"pick": "Cruz", &"use": "Quadrado", &"dash": "Círculo", &"throw": "Triângulo", &"emote": "L1", &"pause": "Options"}
-const XBOX_NAMES := {&"pick": "A", &"use": "X", &"dash": "B", &"throw": "Y", &"emote": "LB", &"pause": "Menu"}
+## Que botão faz cada ação está em Controls (personalizável nas opções).
 
 var device: int
 
@@ -38,7 +29,8 @@ func is_playstation() -> bool:
 
 
 func prompt(action: StringName) -> String:
-	return (PS_NAMES if is_playstation() else XBOX_NAMES)[action]
+	var id := Controls.pad_name(Controls.pad[action], is_playstation())
+	return Controls.PS_TEXT.get(id, id)
 
 
 func is_available() -> bool:
@@ -59,4 +51,4 @@ func _read_move() -> Vector2:
 
 
 func _read_action(action: StringName) -> bool:
-	return Input.is_joy_button_pressed(device, BUTTONS[action])
+	return Controls.pad_down(device, Controls.pad[action])

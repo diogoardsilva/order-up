@@ -85,20 +85,43 @@ static func label(text: String, size := 24, color := TEXT, outline := 0) -> Labe
 
 
 ## Botão de madeira que cresce ao ganhar foco e faz som.
-static func button(text: String, on_pressed: Callable, width := 380.0) -> Button:
+## `focusable` = false: só para o rato (ex. no lobby, onde o teclado e o
+## comando já têm os seus botões e não podem carregar nele sem querer).
+static func button(text: String, on_pressed: Callable, width := 380.0, focusable := true) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.custom_minimum_size = Vector2(width, 60)
+	if not focusable:
+		b.focus_mode = Control.FOCUS_NONE
 	b.focus_entered.connect(func():
 		Sfx.play("ui_move")
 		b.pivot_offset = b.size / 2.0
 		b.create_tween().tween_property(b, "scale", Vector2(1.06, 1.06), 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT))
 	b.focus_exited.connect(func():
 		b.create_tween().tween_property(b, "scale", Vector2.ONE, 0.1))
-	b.mouse_entered.connect(func(): b.grab_focus())
+	if focusable:
+		b.mouse_entered.connect(func(): b.grab_focus())
 	b.pressed.connect(func():
 		Sfx.play("ui_confirm")
+		# Afunda e volta, como um botão a sério.
+		b.pivot_offset = b.size / 2.0
+		var t := b.create_tween()
+		t.tween_property(b, "scale", Vector2(0.95, 0.95), 0.05)
+		t.tween_property(b, "scale", Vector2(1.06, 1.06) if b.has_focus() else Vector2.ONE, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		on_pressed.call())
+	# No botão escolhido aparece o botão do comando que o carrega (✕, A ou Espaço).
+	var glyph := Control.new()
+	glyph.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	glyph.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	glyph.position = Vector2(-10, 0)
+	glyph.draw.connect(func():
+		if b.has_focus():
+			var src := Glyphs.primary_source()
+			var h := minf(30.0, b.size.y * 0.55)
+			Glyphs.draw(glyph, src, &"pick", Vector2(-Glyphs.width(src, &"pick", h), 0), h))
+	b.add_child(glyph)
+	b.focus_entered.connect(glyph.queue_redraw)
+	b.focus_exited.connect(glyph.queue_redraw)
 	return b
 
 
@@ -113,3 +136,57 @@ static func background(parent: Control) -> void:
 	var bg := MenuBackground.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	parent.add_child(bg)
+
+
+## Linha de volume (nome + slider com moeda), com moldura dourada quando tem o foco.
+static func volume_row(text: String, value: float, on_change: Callable) -> Control:
+	# A linha fica com fundo e moldura dourada quando o slider tem o foco (comando/teclado).
+	var holder := PanelContainer.new()
+	var idle := StyleBoxFlat.new()
+	idle.bg_color = Color(0, 0, 0, 0)
+	idle.set_content_margin_all(6)
+	idle.set_border_width_all(3)
+	idle.border_color = Color(0, 0, 0, 0)
+	var focused := idle.duplicate() as StyleBoxFlat
+	focused.bg_color = Color(GOLD, 0.25)
+	focused.border_color = GOLD
+	focused.set_corner_radius_all(4)
+	holder.add_theme_stylebox_override("panel", idle)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 12)
+	holder.add_child(row)
+	var label := label(text, 24, INK)
+	label.custom_minimum_size.x = 110
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	row.add_child(label)
+	var slider := HSlider.new()
+	slider.min_value = 0.0
+	slider.max_value = 1.0
+	slider.step = 0.1
+	slider.value = value
+	slider.custom_minimum_size = Vector2(200, 32)
+	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	slider.add_theme_icon_override("grabber", Art.COIN)
+	slider.add_theme_icon_override("grabber_highlight", Art.COIN)
+	var track := StyleBoxFlat.new()
+	track.bg_color = INK
+	track.content_margin_top = 4
+	track.content_margin_bottom = 4
+	slider.add_theme_stylebox_override("slider", track)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = GOLD
+	fill.content_margin_top = 4
+	fill.content_margin_bottom = 4
+	slider.add_theme_stylebox_override("grabber_area", fill)
+	slider.add_theme_stylebox_override("grabber_area_highlight", fill)
+	slider.value_changed.connect(on_change)
+	slider.focus_entered.connect(func():
+		Sfx.play("ui_move")
+		holder.add_theme_stylebox_override("panel", focused)
+		label.text = "> " + text)
+	slider.focus_exited.connect(func():
+		holder.add_theme_stylebox_override("panel", idle)
+		label.text = text)
+	slider.mouse_entered.connect(slider.grab_focus)
+	row.add_child(slider)
+	return holder

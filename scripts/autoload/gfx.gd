@@ -25,7 +25,7 @@ const PRESETS: Array[Dictionary] = [
 	{"shadows": 2, "lighting": 2, "textures": 2, "post": 1, "particles": 1, "heat": 0},
 	{"shadows": 3, "lighting": 3, "textures": 3, "post": 2, "particles": 2, "heat": 1},
 ]
-const FPS_LIMITS: Array[int] = [0, 30, 60, 120, 144]
+const FPS_LIMITS: Array[int] = [0, 30, 60, 120, 144, 165, 240]
 
 var shadows := 1
 var lighting := 1
@@ -33,7 +33,8 @@ var textures := 1
 var post := 0
 var particles := 1
 var heat := 0
-var vsync := true
+## V-Sync prende os FPS à frequência do monitor (ex.: 100 Hz). Desligado de origem.
+var vsync := false
 ## Índice em FPS_LIMITS (0 = sem limite).
 var fps_limit := 0
 var show_fps := true
@@ -45,7 +46,8 @@ func _ready() -> void:
 	if has_save:
 		for id in OPTIONS:
 			set(id, clampi(cfg.get_value("graphics", id, get(id)), 0, OPTIONS[id][1].size() - 1))
-		vsync = cfg.get_value("graphics", "vsync", true)
+		# A partir da 0.5.2 o V-Sync vem desligado (prendia os FPS a 100).
+		vsync = cfg.get_value("graphics", "vsync", false) if cfg.has_section_key("graphics", "fps_v2") else false
 		fps_limit = clampi(cfg.get_value("graphics", "fps_limit", 0), 0, FPS_LIMITS.size() - 1)
 		show_fps = cfg.get_value("graphics", "show_fps", true)
 	else:
@@ -147,6 +149,7 @@ func _save() -> void:
 	for id in OPTIONS:
 		cfg.set_value("graphics", id, get(id))
 	cfg.set_value("graphics", "vsync", vsync)
+	cfg.set_value("graphics", "fps_v2", true)
 	cfg.set_value("graphics", "fps_limit", fps_limit)
 	cfg.set_value("graphics", "show_fps", show_fps)
 	cfg.save(SAVE_PATH)

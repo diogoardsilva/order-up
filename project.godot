@@ -6,20 +6,26 @@ config_version=5
 [application]
 
 config/name="Order Up!"
-config/version="0.5.0"
+config/version="0.7.0"
 run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 config/icon="res://icon.svg"
 
 [autoload]
 
+Updater="*res://scripts/autoload/updater.gd"
 GameState="*res://scripts/autoload/game_state.gd"
+Screen="*res://scripts/autoload/screen.gd"
 Gfx="*res://scripts/autoload/gfx.gd"
+Controls="*res://scripts/autoload/controls.gd"
 DeviceManager="*res://scripts/autoload/device_manager.gd"
 PlayerRegistry="*res://scripts/autoload/player_registry.gd"
 Net="*res://scripts/autoload/net.gd"
 Sfx="*res://scripts/autoload/sfx.gd"
 Transition="*res://scripts/autoload/transition.gd"
+Profiles="*res://scripts/autoload/profiles.gd"
+Online="*res://scripts/autoload/online.gd"
+NetHello="*res://scripts/autoload/net_hello.gd"
 
 [display]
 
@@ -33,6 +39,8 @@ window/stretch/aspect="keep"
 theme/custom_font="res://assets/fonts/Jersey15.ttf"
 
 [rendering]
+
+textures/vram_compression/import_etc2_astc=true
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"

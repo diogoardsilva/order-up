@@ -10,6 +10,7 @@ const MAX_CUSTOMERS := 5
 const SPAWN_EVERY := 15.0
 ## Probabilidade de cada tamanho de grupo (1, 2, 3 e 4 pessoas).
 const GROUP_WEIGHTS: Array[float] = [0.3, 0.4, 0.18, 0.12]
+const BIG_GROUP_WEIGHTS: Array[float] = [0.12, 0.33, 0.25, 0.3]
 const FIRST_SPAWN := 2.0
 const FAIL_PENALTY := 10
 const MAX_TIP := 10
@@ -27,17 +28,33 @@ var failed_count := 0
 var active := true
 ## No tutorial os clientes não chegam sozinhos nem perdem a paciência.
 var scripted := false
+## Casa Aberta: com a porta fechada não entra ninguém.
+var closed := false
+## Segundos entre grupos (no modo Casa Aberta vai descendo com o tempo).
+var spawn_every := SPAWN_EVERY
 
 ## Pratos que os clientes deste restaurante pedem.
 var menu: Array[Dictionary] = Recipes.ALL.slice(0, 2)
+## Bebidas do bar deste restaurante.
+var drinks: Array[Dictionary] = []
+## Dificuldade: multiplicador da paciência dos clientes.
+var patience_scale := 1.0
+## Multiplicador dos pontos pagos (os níveis de festa pagam mais).
+var points_scale := 1.0
+## Grupos maiores (níveis de festa e almoços de família).
+var big_groups := false
+## Grupos ao mesmo tempo no salão (mais mesas, mais grupos).
+var max_customers := MAX_CUSTOMERS
+## Pontos pagos por pratos entregues a mesas que se foram embora antes do fim.
+var partial_paid := 0
 var _spawn := SPAWN_EVERY - FIRST_SPAWN
 var _next_id := 1
 
 
 func _process(delta: float) -> void:
-	if active and not scripted:
+	if active and not scripted and not closed:
 		_spawn += delta
-		if _spawn >= SPAWN_EVERY and customers.size() < MAX_CUSTOMERS:
+		if _spawn >= spawn_every and customers.size() < max_customers:
 			if spawn_group(_random_order()):
 				_spawn = 0.0
 	for customer in customers.duplicate():
@@ -60,13 +77,21 @@ func _process(delta: float) -> void:
 func _random_order() -> Array[Dictionary]:
 	var roll := randf()
 	var size := 1
-	for w in GROUP_WEIGHTS:
+	for w in (BIG_GROUP_WEIGHTS if big_groups else GROUP_WEIGHTS):
 		roll -= w
 		if roll <= 0.0:
 			break
 		size += 1
+	size = mini(size, 4)
+	# Com mesas de 6, 8 ou 10, às vezes chega uma festa que só cabe nelas.
+	var biggest := 0
+	if kitchen:
+		for t in kitchen.tables():
+			biggest = maxi(biggest, t.capacity())
+	if biggest > 4 and randf() < (0.3 if big_groups else 0.18):
+		size = randi_range(5, biggest)
 	var order: Array[Dictionary] = []
-	for i in mini(size, 4):
+	for i in size:
 		order.append(menu.pick_random())
 	return order
 
@@ -81,6 +106,11 @@ func spawn_group(order: Array) -> bool:
 	free = free.filter(func(t: TableStation): return t.capacity() == smallest)
 	var table: TableStation = free.pick_random()
 	var customer := Customer.new(table, order, kitchen)
+	customer.patience_scale = patience_scale
+	if not drinks.is_empty() and not scripted:
+		for i in order.size():
+			if randf() < 0.55:
+				customer.drinks.append(drinks.pick_random())
 	customer.id = _next_id
 	_next_id += 1
 	table.customer = customer
@@ -95,7 +125,7 @@ func front_of_queue() -> Customer:
 
 ## Um chef acabou de cobrar ao primeiro da fila.
 func charge(customer: Customer) -> void:
-	var points := customer.points()
+	var points := roundi(customer.points() * points_scale)
 	score += points
 	paid_count += 1
 	paid.emit(points, kitchen.register_center())
@@ -103,9 +133,16 @@ func charge(customer: Customer) -> void:
 
 
 func _fail(customer: Customer) -> void:
-	score = maxi(score - FAIL_PENALTY, 0)
-	failed_count += 1
 	var at := kitchen.register_center() if queue.has(customer) else kitchen.cell_center(customer.table.cell)
+	# O que já estava na mesa paga-se na mesma (sem gorjeta), e a multa é menor.
+	var part := customer.delivered_points() if customer.is_waiting() else 0
+	score = maxi(score - FAIL_PENALTY + part, 0)
+	if part > 0:
+		partial_paid += part
+		if not kitchen.quiet:
+			Profiles.add("partial")
+		paid.emit(part, at + Vector2(0, -12))
+	failed_count += 1
 	failed.emit(at)
 	if queue.has(customer):
 		_leave_queue(customer)

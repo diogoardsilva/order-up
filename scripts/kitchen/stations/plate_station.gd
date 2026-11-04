@@ -3,7 +3,7 @@ extends Station
 ## Pilha de pratos limpos. Os pratos são poucos: voltam sujos das mesas e
 ## têm de ser lavados no lava-loiça.
 
-var count := 3
+var count := 8
 
 
 func interact(held: Item) -> Item:

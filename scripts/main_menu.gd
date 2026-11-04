@@ -10,6 +10,11 @@ const TITLE_SIZE_BOX := Vector2(440, 210)
 const DEMO_TAKE_AFTER := 1.2
 const DEMO_SERVE_AFTER := 3.5
 
+## Por preload (e não pelo class_name): quem atualiza a partir da 0.6.0 recebe
+## estes scripts num pacote novo, e as classes novas só se registam ao arrancar.
+const BOOT_SCREEN := preload("res://scripts/boot_screen.gd")
+const WELCOME_FLOW := preload("res://scripts/welcome_flow.gd")
+const CHANGELOG_MENU := preload("res://scripts/changelog_menu.gd")
 var _time := 0.0
 var _kitchen: Kitchen
 var _orders: OrderManager
@@ -18,11 +23,22 @@ var _sign: Control
 var _main_box: VBoxContainer
 var _options_box: VBoxContainer
 var _graphics_box: GraphicsMenu
+var _controls_box: ControlsMenu
+var _profiles_box: ProfilesMenu
 var _column: VBoxContainer
 var _join_box: HBoxContainer
+var _rooms_box: VBoxContainer
+var _friend_rows: VBoxContainer
 var _ip_edit: LineEdit
+var _update_button: Button
+var _update_label: Label
 var _status: Label
 var _first_button: Button
+var _continue_button: Button
+var _play_box: VBoxContainer
+var _online_box: VBoxContainer
+## Página aberta agora (a principal, Jogar ou Online).
+var _page_box: VBoxContainer
 var _fullscreen_button: Button
 
 
@@ -55,30 +71,80 @@ func _ready() -> void:
 	column.add_theme_constant_override("separation", 10)
 	add_child(column)
 
-	_main_box = VBoxContainer.new()
-	_main_box.add_theme_constant_override("separation", 8)
+	# Páginas do menu: a principal e as de Jogar e Online. A bola (ou Shift)
+	# volta sempre à página anterior.
+	_main_box = _page()
 	column.add_child(_main_box)
-	_first_button = UiStyle.button("Jogar", _start_local, 360)
+	if GameState.tutorial_done or int(Profiles.profiles[Profiles.active]["stats"].get("tutorial", 0)) > 0:
+		var rest: Dictionary = Levels.get_level(GameState.level)
+		var stage_name: String = rest["stages"][clampi(GameState.stage, 0, Levels.STAGES - 1)]["name"]
+		_continue_button = UiStyle.button("Continuar: %s %d" % [rest["name"], GameState.stage + 1], _start_local, 360)
+		_continue_button.tooltip_text = stage_name
+		# Texto à esquerda e um pouco menor, para não ficar por baixo do botão do comando.
+		_continue_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_continue_button.add_theme_font_size_override("font_size", 22)
+		_continue_button.add_theme_constant_override("h_separation", 0)
+		_continue_button.text = "  " + _continue_button.text
+		_main_box.add_child(_continue_button)
+	_first_button = UiStyle.button("Jogar", func(): _go_page(_play_box), 360)
 	_main_box.add_child(_first_button)
-	_main_box.add_child(UiStyle.button("Tutorial", _start_tutorial, 360))
-	_main_box.add_child(UiStyle.button("Ser host (criar sala online)", _host, 360))
-	_main_box.add_child(UiStyle.button("Entrar na sala de um amigo", _show_join, 360))
+	_main_box.add_child(UiStyle.button("Online", func(): _go_page(_online_box), 360))
+	_main_box.add_child(UiStyle.button("Perfis e conquistas", _show_profiles, 360))
+	_main_box.add_child(UiStyle.button("Opções", _show_options, 360))
+	# Aparece quando uma atualização já está descarregada.
+	_update_button = UiStyle.button("Reiniciar e atualizar", func(): Updater.restart_now(), 360)
+	_update_button.hide()
+	_main_box.add_child(_update_button)
+	# Novidades e Sair lado a lado.
+	var last_row := HBoxContainer.new()
+	last_row.add_theme_constant_override("separation", 10)
+	last_row.add_child(UiStyle.button("Novidades", _show_changelog, 175))
+	last_row.add_child(UiStyle.button("Sair", func(): get_tree().quit(), 175))
+	_main_box.add_child(last_row)
+	if _continue_button:
+		_first_button = _continue_button
+
+	_play_box = _page("Jogar")
+	_play_box.add_child(UiStyle.button("No mesmo PC (1 a 4)", _start_local, 360))
+	_play_box.add_child(UiStyle.button("Tutorial", _start_tutorial, 360))
+	_play_box.add_child(UiStyle.button("Voltar", _back_page, 360))
+	_play_box.hide()
+	column.add_child(_play_box)
+
+	_online_box = _page("Online")
+	_online_box.add_child(UiStyle.button("Criar sala", _host, 360))
+	_online_box.add_child(UiStyle.button("Entrar numa sala", _show_join, 360))
+	_online_box.add_child(UiStyle.button("Voltar", _back_page, 360))
+	_online_box.hide()
+	column.add_child(_online_box)
+
+	# Entrar numa sala: com o código ou pela lista de amigos ("Juntar").
+	_rooms_box = _page("Entrar numa sala")
+	_rooms_box.add_child(UiStyle.label("Tenho o código", 22, UiStyle.GOLD, 6))
 	_join_box = HBoxContainer.new()
 	_join_box.add_theme_constant_override("separation", 10)
 	_ip_edit = LineEdit.new()
-	_ip_edit.placeholder_text = "IP do host"
+	_ip_edit.placeholder_text = "Código da sala"
 	_ip_edit.text = GameState.last_ip
-	_ip_edit.custom_minimum_size = Vector2(220, 56)
+	_ip_edit.custom_minimum_size = Vector2(220, 54)
 	_ip_edit.text_submitted.connect(func(_t): _join())
 	_join_box.add_child(_ip_edit)
-	_join_box.add_child(UiStyle.button("Ligar", _join, 130))
-	_join_box.hide()
-	_main_box.add_child(_join_box)
-	_main_box.add_child(UiStyle.button("Opções", _show_options, 360))
-	_main_box.add_child(UiStyle.button("Sair", func(): get_tree().quit(), 360))
-	for b in _main_box.get_children():
-		if b is Button:
-			b.custom_minimum_size.y = 54
+	_join_box.add_child(UiStyle.button("Entrar", _join, 130))
+	_rooms_box.add_child(_join_box)
+	_rooms_box.add_child(UiStyle.label("Amigos", 22, UiStyle.GOLD, 6))
+	_friend_rows = VBoxContainer.new()
+	_friend_rows.add_theme_constant_override("separation", 6)
+	_rooms_box.add_child(_friend_rows)
+	_rooms_box.add_child(UiStyle.button("Voltar", func():
+		Sfx.play("ui_back")
+		_go_page(_online_box), 360))
+	_rooms_box.hide()
+	column.add_child(_rooms_box)
+	Online.friends_changed.connect(_refresh_friend_rows)
+	for box in [_main_box, _play_box, _online_box]:
+		for b in box.get_children():
+			if b is Button:
+				b.custom_minimum_size.y = 54
 
 	_options_box = _build_options()
 	_options_box.hide()
@@ -91,6 +157,15 @@ func _ready() -> void:
 	_graphics_box.hide()
 	_graphics_box.closed.connect(_hide_graphics)
 	add_child(_graphics_box)
+	_controls_box = ControlsMenu.new()
+	_controls_box.position = Vector2(50, 40)
+	_controls_box.hide()
+	_controls_box.closed.connect(_hide_controls)
+	add_child(_controls_box)
+	_profiles_box = ProfilesMenu.new()
+	_profiles_box.hide()
+	_profiles_box.closed.connect(_hide_profiles)
+	add_child(_profiles_box)
 
 	_status = UiStyle.label(GameState.menu_message, 22, UiStyle.GOLD, 6)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -104,10 +179,108 @@ func _ready() -> void:
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	info.position = Vector2(16, 690)
 	add_child(info)
+	_update_label = UiStyle.label("", 18, UiStyle.GOLD, 4)
+	_update_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_update_label.position = Vector2(16, 664)
+	add_child(_update_label)
+	Updater.changed.connect(_refresh_update)
+	_refresh_update()
+
+	# A legenda mostra o botão de "dash" para voltar (Shift no teclado).
+	var shift := InputEventKey.new()
+	shift.keycode = KEY_SHIFT
+	if not InputMap.action_has_event("ui_cancel", shift):
+		InputMap.action_add_event("ui_cancel", shift)
+	var help := PromptBar.new([[&"move", "Escolher"], [&"pick", "Confirmar"], [&"dash", "Voltar"]])
+	help.position = Vector2(860, 676)
+	help.size = Vector2(400, 40)
+	help.font_size = 18
+	help.button_height = 26
+	add_child(help)
 
 	_first_button.grab_focus()
 	_intro()
 	Sfx.music_on()
+	# Ao abrir o jogo: primeiro as atualizações, depois (só da primeira vez)
+	# as boas-vindas com a conta e o boneco.
+	if not GameState.booted:
+		GameState.booted = true
+		var boot := BOOT_SCREEN.new()
+		boot.finished.connect(_after_boot)
+		add_child(boot)
+	else:
+		_after_boot()
+
+
+func _after_boot() -> void:
+	if GameState.welcome_done:
+		_first_button.grab_focus()
+		return
+	# Os botões do menu escondem-se para o comando não lhes ir parar.
+	_column.hide()
+	var welcome := WELCOME_FLOW.new()
+	welcome.finished.connect(func():
+		_column.show()
+		_pop(_column)
+		_first_button.grab_focus())
+	add_child(welcome)
+
+
+## Uma página do menu, com uma fita com o título (a principal não tem).
+func _page(title := "") -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	if title != "":
+		var ribbon := Control.new()
+		ribbon.custom_minimum_size = Vector2(360, 52)
+		ribbon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ribbon.draw.connect(func(): _draw_ribbon(ribbon, title))
+		box.add_child(ribbon)
+	return box
+
+
+## Fita vermelha com o título da página, como a do logótipo.
+func _draw_ribbon(ci: Control, text: String) -> void:
+	var w := ci.size.x
+	var band := Rect2(10, 6, w - 20, 40)
+	var dark := Color("8e2430")
+	for side in [-1, 1]:
+		var ex := band.position.x - 8 if side < 0 else band.end.x - 14
+		ci.draw_rect(Rect2(ex, 14, 22, 32), dark)
+		ci.draw_rect(Rect2(ex, 14, 22, 32), UiStyle.INK, false, 3.0)
+	ci.draw_rect(band, Color("d23a32"))
+	ci.draw_rect(Rect2(band.position, Vector2(band.size.x, 4)), Color("f2604a"))
+	ci.draw_rect(Rect2(band.position + Vector2(0, band.size.y - 4), Vector2(band.size.x, 4)), dark)
+	ci.draw_rect(band, UiStyle.INK, false, 3.0)
+	UiStyle.shadow_text(ci, band.position + Vector2(0, 31), text, 32, UiStyle.PAPER, HORIZONTAL_ALIGNMENT_CENTER, band.size.x)
+
+
+func _go_page(box: VBoxContainer) -> void:
+	_main_box.hide()
+	_play_box.hide()
+	_online_box.hide()
+	_rooms_box.hide()
+	box.show()
+	_page_box = box
+	# Os botões aparecem um a um, como folhas novas do bloco.
+	var i := 0
+	for b in box.get_children():
+		var c := b as Control
+		c.modulate.a = 0.0
+		var t := create_tween()
+		t.tween_interval(i * 0.04)
+		t.tween_property(c, "modulate:a", 1.0, 0.14)
+		i += 1
+	for b in box.get_children():
+		if b is Button and b.visible:
+			b.grab_focus()
+			break
+
+
+func _back_page() -> void:
+	Sfx.play("ui_back")
+	_go_page(_main_box)
+	_first_button.grab_focus()
 
 
 func _build_background() -> void:
@@ -147,67 +320,15 @@ func _build_options() -> VBoxContainer:
 		_refresh_options(), 310)
 	inner.add_child(_fullscreen_button)
 	inner.add_child(UiStyle.button("Gráficos...", _show_graphics, 310))
-	inner.add_child(_volume_row("Música", GameState.music_volume, func(v): GameState.set_volumes(v, GameState.sfx_volume)))
-	inner.add_child(_volume_row("Efeitos", GameState.sfx_volume, func(v):
+	inner.add_child(UiStyle.button("Comandos...", _show_controls, 310))
+	inner.add_child(UiStyle.volume_row("Música", GameState.music_volume, func(v): GameState.set_volumes(v, GameState.sfx_volume)))
+	inner.add_child(UiStyle.volume_row("Efeitos", GameState.sfx_volume, func(v):
 		GameState.set_volumes(GameState.music_volume, v)
 		Sfx.play("pickup")))
 	inner.add_child(UiStyle.label("Também podes usar F11 ou Alt+Enter.", 18, UiStyle.INK_SOFT))
 	box.add_child(UiStyle.button("Voltar", _hide_options, 360))
 	_refresh_options()
 	return box
-
-
-func _volume_row(text: String, value: float, on_change: Callable) -> Control:
-	# A linha fica com fundo e moldura dourada quando o slider tem o foco (comando/teclado).
-	var holder := PanelContainer.new()
-	var idle := StyleBoxFlat.new()
-	idle.bg_color = Color(0, 0, 0, 0)
-	idle.set_content_margin_all(6)
-	idle.set_border_width_all(3)
-	idle.border_color = Color(0, 0, 0, 0)
-	var focused := idle.duplicate() as StyleBoxFlat
-	focused.bg_color = Color(UiStyle.GOLD, 0.25)
-	focused.border_color = UiStyle.GOLD
-	focused.set_corner_radius_all(4)
-	holder.add_theme_stylebox_override("panel", idle)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 12)
-	holder.add_child(row)
-	var label := UiStyle.label(text, 24, UiStyle.INK)
-	label.custom_minimum_size.x = 110
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	row.add_child(label)
-	var slider := HSlider.new()
-	slider.min_value = 0.0
-	slider.max_value = 1.0
-	slider.step = 0.1
-	slider.value = value
-	slider.custom_minimum_size = Vector2(200, 32)
-	slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	slider.add_theme_icon_override("grabber", Art.COIN)
-	slider.add_theme_icon_override("grabber_highlight", Art.COIN)
-	var track := StyleBoxFlat.new()
-	track.bg_color = UiStyle.INK
-	track.content_margin_top = 4
-	track.content_margin_bottom = 4
-	slider.add_theme_stylebox_override("slider", track)
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = UiStyle.GOLD
-	fill.content_margin_top = 4
-	fill.content_margin_bottom = 4
-	slider.add_theme_stylebox_override("grabber_area", fill)
-	slider.add_theme_stylebox_override("grabber_area_highlight", fill)
-	slider.value_changed.connect(on_change)
-	slider.focus_entered.connect(func():
-		Sfx.play("ui_move")
-		holder.add_theme_stylebox_override("panel", focused)
-		label.text = "> " + text)
-	slider.focus_exited.connect(func():
-		holder.add_theme_stylebox_override("panel", idle)
-		label.text = text)
-	slider.mouse_entered.connect(slider.grab_focus)
-	row.add_child(slider)
-	return holder
 
 
 func _refresh_options() -> void:
@@ -229,6 +350,51 @@ func _show_graphics() -> void:
 	_pop(_graphics_box)
 
 
+func _show_changelog() -> void:
+	Sfx.play("ui_confirm")
+	_column.hide()
+	_sign.hide()
+	var menu: Control = CHANGELOG_MENU.new()
+	menu.closed.connect(func():
+		menu.queue_free()
+		_column.show()
+		_sign.show()
+		_first_button.grab_focus())
+	add_child(menu)
+	menu.focus_first()
+	_pop(menu)
+
+
+func _show_profiles() -> void:
+	_column.hide()
+	_sign.hide()
+	_profiles_box.show()
+	_profiles_box.focus_first()
+	_pop(_profiles_box)
+
+
+func _hide_profiles() -> void:
+	_profiles_box.hide()
+	_column.show()
+	_sign.show()
+	_first_button.grab_focus()
+
+
+func _show_controls() -> void:
+	_column.hide()
+	_sign.hide()
+	_controls_box.show()
+	_controls_box.focus_first()
+	_pop(_controls_box)
+
+
+func _hide_controls() -> void:
+	_controls_box.hide()
+	_column.show()
+	_sign.show()
+	_fullscreen_button.grab_focus()
+
+
 func _hide_graphics() -> void:
 	_graphics_box.hide()
 	_column.show()
@@ -247,9 +413,17 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel") and _graphics_box.visible:
 		Sfx.play("ui_back")
 		_hide_graphics()
+	elif event.is_action_pressed("ui_cancel") and _controls_box.visible:
+		Sfx.play("ui_back")
+		_hide_controls()
 	elif event.is_action_pressed("ui_cancel") and _options_box.visible:
 		Sfx.play("ui_back")
 		_hide_options()
+	elif event.is_action_pressed("ui_cancel") and _rooms_box.visible and not _ip_edit.has_focus():
+		Sfx.play("ui_back")
+		_go_page(_online_box)
+	elif event.is_action_pressed("ui_cancel") and (_play_box.visible or _online_box.visible):
+		_back_page()
 
 
 func _intro() -> void:
@@ -289,8 +463,7 @@ func _run_demo(delta: float) -> void:
 			_kitchen.show_fx(_kitchen.cell_center(customer.table.cell), "Anotado!", UiStyle.GOLD)
 			t = 0.0
 		elif customer.is_waiting() and t > DEMO_SERVE_AFTER:
-			var plate := Item.plate()
-			plate.contents.assign(customer.missing()[0]["needs"])
+			var plate := Item.for_recipe(customer.missing()[0])
 			customer.table.items.append(plate)
 			t = 0.0
 		elif not customer.is_calling() and not customer.is_waiting():
@@ -371,7 +544,7 @@ func _start_tutorial() -> void:
 ## Na primeira vez que se joga, o jogo começa pelo tutorial.
 func _start_local() -> void:
 	Net.leave()
-	GameState.mode = GameState.Mode.PLAY if GameState.tutorial_done else GameState.Mode.TUTORIAL
+	GameState.mode = GameState.Mode.PLAY if GameState.tutorial_done or int(Profiles.profiles[Profiles.active]["stats"].get("tutorial", 0)) > 0 else GameState.Mode.TUTORIAL
 	Transition.go("res://scenes/lobby.tscn")
 
 
@@ -384,17 +557,63 @@ func _host() -> void:
 
 
 func _show_join() -> void:
-	_join_box.show()
-	_ip_edit.grab_focus()
+	_go_page(_rooms_box)
+	_refresh_friend_rows()
+	if Online.logged_in():
+		Online.refresh_friends()
+
+
+## Amigos com sala aberta primeiro, com "Juntar"; depois os outros online.
+func _refresh_friend_rows() -> void:
+	if _friend_rows == null:
+		return
+	for c in _friend_rows.get_children():
+		c.queue_free()
+	if not Online.logged_in():
+		var l := UiStyle.label("Entra na tua conta (em Perfis e conquistas) para veres aqui os teus amigos.", 18, UiStyle.MUTED, 4)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size.x = 360
+		_friend_rows.add_child(l)
+		return
+	var list: Array = Online.friends.filter(func(f): return f.get("online", false))
+	list.sort_custom(func(a, b): return str(a.get("room_code", "")) != "" and str(b.get("room_code", "")) == "")
+	if list.is_empty():
+		_friend_rows.add_child(UiStyle.label("Nenhum amigo online agora.", 18, UiStyle.MUTED, 4))
+		return
+	for f in list.slice(0, 3):
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var name := UiStyle.label("● " + str(f.get("name", "?")), 22, UiStyle.TEXT, 4)
+		name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		name.custom_minimum_size.x = 210
+		name.clip_text = true
+		row.add_child(name)
+		var room = f.get("room_code")
+		if room is String and room != "":
+			var b := UiStyle.button("Juntar", func():
+				_status.text = "A entrar na sala de %s..." % f.get("name", "?")
+				Online.join_room(room), 142)
+			b.custom_minimum_size.y = 44
+			row.add_child(b)
+		else:
+			row.add_child(UiStyle.label("sem sala", 18, UiStyle.MUTED, 4))
+		_friend_rows.add_child(row)
 
 
 func _join() -> void:
 	var ip := _ip_edit.text.strip_edges()
 	if ip.is_empty() or Net.join(ip) != OK:
-		_status.text = "Escreve um IP válido."
+		_status.text = "Escreve o código da sala (ex. K7Q-9XMF) ou um IP."
 		return
 	GameState.remember_ip(ip)
-	_status.text = "A ligar a %s..." % ip
+	_status.text = "A entrar na sala %s..." % ip
 	multiplayer.connected_to_server.connect(func():
 		GameState.mode = GameState.Mode.PLAY
 		Transition.go("res://scenes/lobby.tscn"), CONNECT_ONE_SHOT)
+
+
+func _refresh_update() -> void:
+	_update_label.text = Updater.status_text()
+	_update_button.visible = Updater.state == "ready"
+	if Updater.state == "ready":
+		_update_button.text = "Atualizar para a %s" % Updater.new_version

@@ -5,6 +5,9 @@ extends Control
 
 const CHEF_SCALE := 6.0
 
+## Clique do rato no cartão: o lobby decide o que fazer (entrar, trocar...).
+signal clicked(index: int, button: int, at: Vector2)
+
 var index := 0
 var _player := {}
 var _time := 0.0
@@ -16,10 +19,17 @@ var _join_pop := 0.0
 func set_player(player: Dictionary) -> void:
 	if player and not _player:
 		_join_pop = 1.0
-	elif player and _player and player.get("character") != _player.get("character"):
+	elif player and _player and (player.get("character") != _player.get("character") or player.get("look") != _player.get("look")):
 		_bump = 1.0
 	_player = player
 	queue_redraw()
+
+
+func _gui_input(event: InputEvent) -> void:
+	var mb := event as InputEventMouseButton
+	if mb and mb.pressed:
+		clicked.emit(index, mb.button_index, mb.position)
+		accept_event()
 
 
 func bump(dir: int) -> void:
@@ -46,7 +56,14 @@ func _draw() -> void:
 	var ribbon := Rect2(rect.position + Vector2(18, 16), Vector2(rect.size.x - 36, 40))
 	draw_rect(ribbon, color if joined else Color("9c7b52"))
 	draw_rect(Rect2(ribbon.position + Vector2(0, ribbon.size.y - 4), Vector2(ribbon.size.x, 4)), Color(0, 0, 0, 0.2))
-	draw_string(font, ribbon.position + Vector2(0, 30), "Jogador %d" % (index + 1), HORIZONTAL_ALIGNMENT_CENTER, ribbon.size.x, 26, UiStyle.TEXT)
+	# Nome do perfil (troca-se com o botão de atirar).
+	var title: String = _player.get("name", "") if joined else ""
+	if title.is_empty():
+		title = "Jogador %d" % (index + 1)
+	var tsize := 26
+	while tsize > 14 and font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, tsize).x > ribbon.size.x - 70:
+		tsize -= 1
+	draw_string(font, ribbon.position + Vector2(0, 30), title, HORIZONTAL_ALIGNMENT_CENTER, ribbon.size.x, tsize, UiStyle.TEXT)
 	# Online, os jogadores do PC que criou a sala levam a marca de host.
 	if joined and Net.online and _player.get("peer", 0) == 1:
 		var tag := Rect2(ribbon.end + Vector2(-58, -8), Vector2(58, 24))
@@ -54,7 +71,8 @@ func _draw() -> void:
 		draw_rect(tag, UiStyle.GOLD)
 		draw_string(font, tag.position + Vector2(0, 19), "HOST", HORIZONTAL_ALIGNMENT_CENTER, tag.size.x, 20, UiStyle.INK)
 
-	var character: int = _player.get("character", index)
+	var look := PlayerRegistry.look_of(_player) if joined else CharacterLook.preset(index)
+	var outfit: int = _player.get("role", 0)
 	var frame_px := Vector2(Art.CHEF_FRAME) * CHEF_SCALE
 	var center := Vector2(0, -4)
 	# Sombra e chef a andar no sítio, com um pulo ao trocar.
@@ -68,12 +86,20 @@ func _draw() -> void:
 	draw_set_transform(origin + Vector2(0, frame_px.y / 2.0 - 30), 0.0, Vector2(CHEF_SCALE * (1.0 + squash), CHEF_SCALE * (1.0 - squash)) * pop)
 	var tl := Vector2(-Art.CHEF_FRAME.x / 2.0, -Art.CHEF_FRAME.y + 5)
 	var modulate := Color.WHITE if joined else Color(0.25, 0.15, 0.12, 0.55)
-	Art.frame(self, Art.CHEFS[character], Art.CHEF_FRAME, col, row, tl, false, modulate)
-	Art.frame(self, Art.CHEF_TINT, Art.CHEF_FRAME, col, row, tl, false, color * modulate if joined else modulate)
+	if joined:
+		CharacterLook.draw(self, look, outfit, col, row, tl, false, modulate)
+	else:
+		CharacterLook.draw_silhouette(self, look, outfit, col, row, tl, false, modulate)
 	draw_set_transform(size / 2.0, 0.0, Vector2(pop, pop))
 
 	if joined:
-		draw_string(font, Vector2(rect.position.x, 120), Art.CHEF_NAMES[character], HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 34, UiStyle.INK)
+		draw_string(font, Vector2(rect.position.x, 120), PlayerRegistry.look_name(_player), HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 34, UiStyle.INK)
+		# Papel escolhido (cima/baixo).
+		var role: int = _player.get("role", 0)
+		var role_rect := Rect2(Vector2(rect.position.x + 20, 132), Vector2(rect.size.x - 40, 28))
+		draw_rect(role_rect, Color(UiStyle.INK, 0.12))
+		draw_string(font, role_rect.position + Vector2(0, 21), "▲ %s ▼" % GameState.PLAYER_ROLES[role][0], HORIZONTAL_ALIGNMENT_CENTER, role_rect.size.x,
+			_role_size(GameState.PLAYER_ROLES[role][0], role_rect.size.x), UiStyle.INK_SOFT)
 		# Setas para trocar de personagem, a mexer-se ligeiramente.
 		var wiggle := sin(_time * 4.0) * 3.0
 		for dir in [-1, 1]:
@@ -87,6 +113,18 @@ func _draw() -> void:
 		draw_string(font, Vector2(rect.position.x, 168), device, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 18, UiStyle.INK_SOFT)
 	else:
 		var a := 0.5 + 0.5 * sin(_time * 3.0 + index)
-		draw_string(font, Vector2(rect.position.x, 130), "Carrega em pegar", HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 24, Color(UiStyle.INK, 0.4 + 0.6 * a))
-		draw_string(font, Vector2(rect.position.x, 160), "para entrar", HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 24, Color(UiStyle.INK, 0.4 + 0.6 * a))
+		# O botão de pegar, a ser carregado de vez em quando, para se perceber logo.
+		var src := Glyphs.primary_source()
+		var h := 44.0
+		var pressed := fmod(_time + index * 0.3, 1.4) < 0.15
+		draw_string(font, Vector2(rect.position.x, 96), "Carrega em", HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 24, Color(UiStyle.INK, 0.4 + 0.6 * a))
+		Glyphs.draw(self, src, &"pick", Vector2(rect.get_center().x - Glyphs.width(src, &"pick", h) / 2.0, 128), h, pressed)
+		draw_string(font, Vector2(rect.position.x, 176), "para entrar", HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 24, Color(UiStyle.INK, 0.4 + 0.6 * a))
 	draw_set_transform(Vector2.ZERO)
+
+
+func _role_size(text: String, width: float) -> int:
+	var size := 20
+	while size > 12 and UiStyle.FONT.get_string_size("▲ %s ▼" % text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x > width - 6:
+		size -= 1
+	return size

@@ -19,18 +19,41 @@ const SOUNDS := {
 	"dash": preload("res://assets/audio/dash.wav"),
 	"note": preload("res://assets/audio/note.wav"),
 	"round_end": preload("res://assets/audio/round_end.wav"),
+	"step1": preload("res://assets/audio/step1.wav"),
+	"step2": preload("res://assets/audio/step2.wav"),
+	"door": preload("res://assets/audio/door.wav"),
+	"kaching": preload("res://assets/audio/kaching.wav"),
+	"served": preload("res://assets/audio/served.wav"),
+	"angry": preload("res://assets/audio/angry.wav"),
+	"happy": preload("res://assets/audio/happy.wav"),
+	"throw": preload("res://assets/audio/throw.wav"),
+	"catch": preload("res://assets/audio/catch.wav"),
+	"achievement": preload("res://assets/audio/achievement.wav"),
+	"splash": preload("res://assets/audio/splash.wav"),
+	"step_done": preload("res://assets/audio/step_done.wav"),
+	"count": preload("res://assets/audio/count.wav"),
+	"go": preload("res://assets/audio/go.wav"),
+	"sparkle": preload("res://assets/audio/sparkle.wav"),
+	"star": preload("res://assets/audio/star.wav"),
+	"pop": preload("res://assets/audio/pop.wav"),
+	"swoosh": preload("res://assets/audio/swoosh.wav"),
+	"lid": preload("res://assets/audio/lid.wav"),
+	"burn": preload("res://assets/audio/burn.wav"),
 }
 const MUSIC: AudioStreamWAV = preload("res://assets/audio/music.wav")
 const MUSIC_MENU: AudioStreamWAV = preload("res://assets/audio/music_menu.wav")
 const MUSIC_DB := -14.0
 const SIZZLE: AudioStreamWAV = preload("res://assets/audio/sizzle.wav")
-const VOICES := 10
+const MURMUR: AudioStreamWAV = preload("res://assets/audio/murmur.wav")
+const VOICES := 14
 
 var _players: Array[AudioStreamPlayer] = []
 var _next := 0
 var _music := AudioStreamPlayer.new()
 var _sizzle := AudioStreamPlayer.new()
 var _sizzle_target := -80.0
+var _murmur := AudioStreamPlayer.new()
+var _murmur_target := -80.0
 
 
 func _ready() -> void:
@@ -40,7 +63,7 @@ func _ready() -> void:
 		p.bus = "SFX"
 		add_child(p)
 		_players.append(p)
-	for stream: AudioStreamWAV in [MUSIC, MUSIC_MENU, SIZZLE]:
+	for stream: AudioStreamWAV in [MUSIC, MUSIC_MENU, SIZZLE, MURMUR]:
 		stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
 		stream.loop_begin = 0
 		stream.loop_end = stream.data.size() / 2
@@ -51,6 +74,10 @@ func _ready() -> void:
 	_sizzle.volume_db = -80.0
 	_sizzle.bus = "SFX"
 	add_child(_sizzle)
+	_murmur.stream = MURMUR
+	_murmur.volume_db = -80.0
+	_murmur.bus = "SFX"
+	add_child(_murmur)
 
 
 func play(name: String, volume_db := 0.0, pitch_spread := 0.06) -> void:
@@ -82,7 +109,22 @@ func set_sizzle(amount: float) -> void:
 	_sizzle_target = -80.0 if amount <= 0.0 else lerpf(-18.0, -8.0, clampf(amount, 0.0, 1.0))
 
 
+## Burburinho do salão: 0 (vazio) a 1 (cheio).
+func set_murmur(amount: float) -> void:
+	_murmur_target = -80.0 if amount <= 0.0 else lerpf(-26.0, -15.0, clampf(amount, 0.0, 1.0))
+
+
+## Som num sítio do ecrã: mais baixo e com o tom um pouco diferente de cada vez.
+func play_soft(name: String, volume_db := -6.0) -> void:
+	play(name, volume_db, 0.12)
+
+
 func _process(delta: float) -> void:
+	_murmur.volume_db = move_toward(_murmur.volume_db, _murmur_target, delta * 30.0)
+	if _murmur.volume_db > -79.0 and not _murmur.playing:
+		_murmur.play()
+	elif _murmur.volume_db <= -79.0 and _murmur.playing:
+		_murmur.stop()
 	_sizzle.volume_db = move_toward(_sizzle.volume_db, _sizzle_target, delta * 60.0)
 	if _sizzle.volume_db > -79.0 and not _sizzle.playing:
 		_sizzle.play()
