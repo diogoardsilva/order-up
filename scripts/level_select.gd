@@ -105,7 +105,7 @@ func _rows() -> Array:
 	rows.append(["mode", "Modo", MODE_NAMES[1 if GameState.endless else 0], MODE_DESC[1 if GameState.endless else 0]])
 	var d: Array = GameState.DIFFICULTIES[GameState.difficulty]
 	var v := GameState.difficulty_values()
-	rows.append(["difficulty", "Dificuldade", d[0], "Paciência dos clientes x%.2g, ronda de %d min." % [v["patience"], v["minutes"]]])
+	rows.append(["difficulty", "Dificuldade", d[0], "Paciência dos clientes x%s, ronda de %d min." % [str(snappedf(v["patience"], 0.01)), v["minutes"]]])
 	if GameState.difficulty == GameState.DIFFICULTIES.size() - 1:
 		rows.append(["patience", "Paciência dos clientes", GameState.CUSTOM_PATIENCE[GameState.custom[0]][1], "Quanto tempo esperam para pedir e pela comida."])
 		rows.append(["spawn", "Clientes a chegar", GameState.CUSTOM_SPAWN[GameState.custom[1]][1], "De quanto em quanto tempo entra um grupo."])
