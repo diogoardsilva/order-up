@@ -131,8 +131,8 @@ func _test_kitchens() -> void:
 			var plan: Array = Levels.TABLE_PLANS[k]
 			var tables := kitchen.tables()
 			_ok(tables.size() == plan[1].size(), "%s/%d: %d mesas em vez de %d" % [level["restaurant"], k, tables.size(), plan[1].size()])
-			var caps := tables.map(func(t): return t.capacity())
-			var want := plan[1].map(func(t): return t[2] * 2)
+			var caps: Array = tables.map(func(t): return t.capacity())
+			var want: Array = plan[1].map(func(t): return t[2] * 2)
 			caps.sort()
 			want.sort()
 			_ok(caps == want, "%s/%d: lugares %s em vez de %s" % [level["restaurant"], k, caps, want])
