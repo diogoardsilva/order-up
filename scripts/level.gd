@@ -899,9 +899,7 @@ func _draw_results() -> void:
 		var tex := Art.STAR if full else Art.STAR_EMPTY
 		var size := tex.get_size() * s / 2.0
 		_hud.draw_texture_rect(tex, Rect2(center - size / 2.0, size), false)
-	if Net.is_client():
-		_prompt(Vector2(x + w / 2.0, y + 395), "À espera do host...")
-	elif _has_next():
+	if _has_next():
 		_prompt(Vector2(x + w / 2.0, y + 372), "{pick} Próximo nível")
 		_prompt(Vector2(x + w / 2.0, y + 412), "{throw} Repetir    {dash} Escolher nível")
 	else:
@@ -912,8 +910,6 @@ func _draw_results() -> void:
 ## Botões do fim para quem joga com o rato (o comando usa ✕, △ e ○).
 func _show_results_buttons() -> void:
 	_pause_button.hide()
-	if Net.is_client():
-		return
 	var add := func(text: String, cb: Callable, w: float):
 		_results_buttons.add_child(UiStyle.button(text, func():
 			_finish_time = maxf(_finish_time, 1.0)
@@ -1176,7 +1172,7 @@ func _draw_endless_results(x: float, y: float, w: float) -> void:
 		_hud.draw_set_transform(Vector2.ZERO)
 	else:
 		_hud.draw_string(font, Vector2(x, y + 300), "Recorde: %d" % GameState.best_endless(_level["id"]), HORIZONTAL_ALIGNMENT_CENTER, w, 26, UiStyle.INK_SOFT)
-	_prompt(Vector2(x + w / 2.0, y + 395), "À espera do host..." if Net.is_client() else "{pick} Escolher restaurante")
+	_prompt(Vector2(x + w / 2.0, y + 395), "{pick} Escolher restaurante")
 
 
 func _snapshot() -> Array:
@@ -1275,7 +1271,11 @@ func _rpc_snapshot(data: Array) -> void:
 
 
 func _on_confirm() -> void:
-	if not _finished or Net.is_client() or _finish_time < 0.8:
+	if not _finished or _finish_time < 0.8:
+		return
+	if Net.is_client():
+		# Qualquer jogador pode avançar: o anfitrião faz o resto.
+		_rpc_results_input.rpc_id(1, "confirm")
 		return
 	if _tutorial:
 		GameState.mode = GameState.Mode.PLAY
@@ -1290,14 +1290,20 @@ func _on_confirm() -> void:
 
 ## △ no fim: repetir o mesmo nível.
 func _on_retry() -> void:
-	if not _finished or Net.is_client() or _tutorial or _endless or _finish_time < 0.8:
+	if not _finished or _tutorial or _endless or _finish_time < 0.8:
+		return
+	if Net.is_client():
+		_rpc_results_input.rpc_id(1, "retry")
 		return
 	_start_stage(GameState.level, int(_level["stage"]))
 
 
 ## ○ no fim: voltar à escolha do restaurante e do nível.
 func _on_results_back() -> void:
-	if not _finished or Net.is_client() or _finish_time < 0.8:
+	if not _finished or _finish_time < 0.8:
+		return
+	if Net.is_client():
+		_rpc_results_input.rpc_id(1, "back")
 		return
 	Sfx.play("ui_back")
 	if _tutorial:
@@ -1305,6 +1311,20 @@ func _on_results_back() -> void:
 		Transition.go("res://scenes/main_menu.tscn")
 		return
 	_to_level_select()
+
+
+## Um jogador noutro PC carregou num botão do fim do nível.
+@rpc("any_peer", "call_remote", "reliable")
+func _rpc_results_input(action: String) -> void:
+	if not multiplayer.is_server() or not _finished:
+		return
+	match action:
+		"confirm":
+			_on_confirm()
+		"retry":
+			_on_retry()
+		"back":
+			_on_results_back()
 
 
 func _start_stage(index: int, stage: int) -> void:

@@ -1206,8 +1206,6 @@ func _draw_wall(cell: Vector2i, rect: Rect2) -> void:
 func _draw_table(table: TableStation, rect: Rect2) -> void:
 	var big := table.capacity() > 2
 	draw_texture(Art.themed(_theme(), "table_big" if big else "table"), rect.position)
-	draw_string(UiStyle.FONT, rect.position + Vector2(3, 10), "%d" % table.number,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color("a02530"))
 	# Pratos espalhados pela mesa.
 	var spots := [Vector2(-4, -2), Vector2(4, 2), Vector2(-4, 22), Vector2(4, 26), Vector2(5, -6), Vector2(-5, 7), Vector2(5, 17), Vector2(-5, 30)] \
 		if big else [Vector2(-4, -2), Vector2(4, 2), Vector2(5, -6), Vector2(-5, 6)]
@@ -1267,6 +1265,7 @@ func _draw_customer(customer: Customer) -> void:
 			var bubble_center := head + Vector2(0, -14 + roundf(sin(Time.get_ticks_msec() / 120.0)))
 			Art.centered(self, Art.BUBBLE, bubble_center)
 			draw_string(font, bubble_center + Vector2(-8, 4), "!", HORIZONTAL_ALIGNMENT_CENTER, 16, 14, Color("e8574d"))
+			_draw_table_tag(customer.table.number, bubble_center + Vector2(0, -9))
 			_draw_patience(customer, bubble_center)
 		Customer.State.WAITING:
 			# Balão com os pratos que ainda faltam e a paciência.
@@ -1277,6 +1276,7 @@ func _draw_customer(customer: Customer) -> void:
 			for k in missing.size():
 				var plate := Item.for_recipe(missing[k])
 				ItemArt.draw_item(self, plate, bubble_center + Vector2((k - (missing.size() - 1) / 2.0) * 18.0, -1))
+			_draw_table_tag(customer.table.number, bubble_center + Vector2(0, -9))
 			_draw_patience(customer, bubble_center)
 		Customer.State.EATING:
 			# Garfadas: corações pequenos de vez em quando.
@@ -1295,6 +1295,16 @@ func _draw_customer(customer: Customer) -> void:
 		Customer.State.LEAVING:
 			if customer.angry:
 				draw_string(font, head + Vector2(-12, -2), "!!", HORIZONTAL_ALIGNMENT_CENTER, 24, 12, Color("e8574d"))
+
+
+## Etiqueta com o número da mesa ("M5"), igual à dos talões, por cima do balão.
+func _draw_table_tag(number: int, bottom_center: Vector2) -> void:
+	if number <= 0:
+		return
+	var badge := Rect2((bottom_center + Vector2(-8, -9)).round(), Vector2(16, 9))
+	draw_rect(badge.grow(1), UiStyle.INK)
+	draw_rect(badge, Color("a02530"))
+	draw_string(UiStyle.FONT, badge.position + Vector2(0, 8), "M%d" % number, HORIZONTAL_ALIGNMENT_CENTER, badge.size.x, 9, UiStyle.TEXT)
 
 
 ## Balão de fala com a largura pedida (para vários pratos).
