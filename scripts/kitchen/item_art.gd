@@ -12,7 +12,12 @@ static func draw_item(ci: CanvasItem, item: Item, at: Vector2) -> void:
 		_draw_cookware(ci, item, at)
 		return
 	if not item.is_plate():
+		# Vários iguais: um molho, uns por cima dos outros.
+		for k in range(item.count - 1, 0, -1):
+			draw_content(ci, item.content_id(), at + COUNT_OFFSETS[k])
 		draw_content(ci, item.content_id(), at)
+		if item.count > 1:
+			_count_badge(ci, at + Vector2(6, -7), item.count)
 		return
 	if item.is_glass():
 		if item.second:
@@ -44,6 +49,18 @@ static func draw_item(ci: CanvasItem, item: Item, at: Vector2) -> void:
 		draw_content(ci, item.contents[i], at + OFFSETS[n - 1][i])
 
 
+const COUNT_OFFSETS := [Vector2.ZERO, Vector2(-4, -3), Vector2(4, -3), Vector2(0, -6)]
+
+
+## Bolinha com o número (ex. "2") ao lado de um molho de ingredientes ou de
+## uma panela com 2 doses.
+static func _count_badge(ci: CanvasItem, at: Vector2, n: int) -> void:
+	at = at.round()
+	ci.draw_circle(at, 4.5, Color("3b2027"))
+	ci.draw_circle(at, 3.5, Color("f6c444"))
+	ci.draw_string(UiStyle.FONT, at + Vector2(-4, 3), str(n), HORIZONTAL_ALIGNMENT_CENTER, 8, 8, Color("3b2027"))
+
+
 const OFFSETS := [
 	[Vector2.ZERO],
 	[Vector2(-3, -1), Vector2(3, 1)],
@@ -59,7 +76,12 @@ static func _draw_cookware(ci: CanvasItem, item: Item, at: Vector2) -> void:
 			for i in n:
 				draw_content(ci, item.contents[i], at + Vector2((i - (n - 1) / 2.0) * 5.0, 0))
 		Item.Cook.READY:
-			draw_content(ci, item.product, at)
+			if item.portions > 1:
+				draw_content(ci, item.product, at + Vector2(-2, -2))
+				draw_content(ci, item.product, at + Vector2(2, 1))
+				_count_badge(ci, at + Vector2(7, -6), item.portions)
+			else:
+				draw_content(ci, item.product, at)
 		Item.Cook.BURNT:
 			ci.draw_circle(at, 6.0, Color("1e1a1a"))
 

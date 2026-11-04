@@ -1,6 +1,7 @@
 class_name BoardStation
 extends Station
-## Tábua de cortar: pousa-se um ingrediente cru e mantém-se "usar".
+## Tábua de cortar: pousa-se um ingrediente cru (ou vários iguais) e
+## mantém-se "usar". Vários cortam-se de uma vez, a demorar um pouco mais.
 
 const CHOP_TIME := 1.5
 
@@ -19,9 +20,14 @@ func use(delta: float) -> void:
 	if item == null or not item.can_chop():
 		return
 	_chop += delta
-	if _chop >= CHOP_TIME:
+	if _chop >= chop_time():
 		item.chopped = true
 		_chop = 0.0
+
+
+func chop_time() -> float:
+	var n := item.count if item else 1
+	return CHOP_TIME * (1.0 + 0.6 * (n - 1))
 
 
 func _get_extra() -> Variant:
@@ -33,4 +39,4 @@ func _set_extra(extra: Variant) -> void:
 
 
 func progress() -> float:
-	return _chop / CHOP_TIME if _chop > 0.0 else -1.0
+	return _chop / chop_time() if _chop > 0.0 else -1.0

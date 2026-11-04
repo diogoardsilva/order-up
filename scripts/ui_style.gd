@@ -85,17 +85,22 @@ static func label(text: String, size := 24, color := TEXT, outline := 0) -> Labe
 
 
 ## Botão de madeira que cresce ao ganhar foco e faz som.
-static func button(text: String, on_pressed: Callable, width := 380.0) -> Button:
+## `focusable` = false: só para o rato (ex. no lobby, onde o teclado e o
+## comando já têm os seus botões e não podem carregar nele sem querer).
+static func button(text: String, on_pressed: Callable, width := 380.0, focusable := true) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.custom_minimum_size = Vector2(width, 60)
+	if not focusable:
+		b.focus_mode = Control.FOCUS_NONE
 	b.focus_entered.connect(func():
 		Sfx.play("ui_move")
 		b.pivot_offset = b.size / 2.0
 		b.create_tween().tween_property(b, "scale", Vector2(1.06, 1.06), 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT))
 	b.focus_exited.connect(func():
 		b.create_tween().tween_property(b, "scale", Vector2.ONE, 0.1))
-	b.mouse_entered.connect(func(): b.grab_focus())
+	if focusable:
+		b.mouse_entered.connect(func(): b.grab_focus())
 	b.pressed.connect(func():
 		Sfx.play("ui_confirm")
 		# Afunda e volta, como um botão a sério.

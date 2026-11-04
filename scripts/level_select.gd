@@ -28,6 +28,8 @@ var _row_labels: Array[Label] = []
 ## Estrelas guardadas: "restaurante:nível" -> 0 a 3 (lidas uma vez).
 var _stars := {}
 var _shake := 0.0
+## Primeira linha de definições que se vê (para os cliques do rato).
+var _first_row := 0
 ## Quantas linhas de definições se veem de cada vez.
 const VISIBLE_ROWS := 3
 const SETTINGS_FROM := 2
@@ -79,6 +81,15 @@ func _ready() -> void:
 		help.position = Vector2(0, 668)
 		help.size = Vector2(1280, 44)
 		add_child(help)
+		# Para quem joga só com o rato.
+		var back := UiStyle.button("Voltar", _go_back, 170, false)
+		back.position = Vector2(24, 664)
+		back.size = Vector2(170, 48)
+		add_child(back)
+		var go := UiStyle.button("Começar", _start, 190, false)
+		go.position = Vector2(1066, 664)
+		go.size = Vector2(190, 48)
+		add_child(go)
 	for source in DeviceManager.all_sources():
 		source.poll()
 		_last_x[source] = source.move.x
@@ -125,6 +136,9 @@ func _refresh_helper() -> void:
 	var r := _row - SETTINGS_FROM
 	# Janela de linhas à volta da escolhida.
 	var first := clampi(r - 1, 0, maxi(rows.size() - VISIBLE_ROWS, 0))
+	if r < 0:
+		first = clampi(_first_row, 0, maxi(rows.size() - VISIBLE_ROWS, 0))
+	_first_row = first
 	for i in _row_labels.size():
 		var k := first + i
 		var l := _row_labels[i]
@@ -209,6 +223,67 @@ func _start() -> void:
 		Transition.go("res://scenes/level.tscn")
 
 
+func _go_back() -> void:
+	Sfx.play("ui_back")
+	if Net.online:
+		Net.return_to_lobby.rpc()
+	else:
+		Transition.go("res://scenes/lobby.tscn")
+
+
+## Rato: clicar num restaurante ou num nível escolhe-o (clicar outra vez no
+## nível escolhido começa); nas definições, a metade esquerda/direita da linha
+## (ou a roda) muda o valor.
+func _input(event: InputEvent) -> void:
+	var mb := event as InputEventMouseButton
+	if mb == null or not mb.pressed or Net.is_client():
+		return
+	var at := mb.position
+	var wheel := mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN
+	if mb.button_index != MOUSE_BUTTON_LEFT and not wheel:
+		return
+	var count := Levels.ALL.size()
+	var start_x := (1280.0 - (count * CARD_SIZE.x + (count - 1) * GAP)) / 2.0
+	for i in count:
+		var rect := Rect2(Vector2(start_x + i * (CARD_SIZE.x + GAP), CARD_Y - CARD_SIZE.y / 2.0), CARD_SIZE)
+		if rect.has_point(at) and not wheel:
+			_row = 0
+			if i != _index:
+				_index = i
+				_stage = 0
+				while _stage < Levels.STAGES - 1 and _unlocked(_index, _stage + 1):
+					_stage += 1
+			_after_mouse()
+			return
+	var tiles_x := (1280.0 - (Levels.STAGES * TILE_SIZE.x + (Levels.STAGES - 1) * TILE_GAP)) / 2.0
+	for k in Levels.STAGES:
+		var rect := Rect2(Vector2(tiles_x + k * (TILE_SIZE.x + TILE_GAP), TILES_Y - 6), TILE_SIZE + Vector2(0, 6))
+		if rect.has_point(at) and not wheel:
+			var again := _row == 1 and _stage == k
+			_row = 1
+			_stage = k
+			_after_mouse()
+			if again:
+				_start()
+			return
+	for i in _row_labels.size():
+		var rect := Rect2(Vector2(240, 528 + i * 31), Vector2(800, 31))
+		var k := _first_row + i
+		if rect.has_point(at) and k < _rows().size():
+			_row = k + SETTINGS_FROM
+			var dir := (1 if at.x > 640 else -1) if not wheel else (-1 if mb.button_index == MOUSE_BUTTON_WHEEL_UP else 1)
+			_change_row(dir)
+			_after_mouse()
+			return
+
+
+func _after_mouse() -> void:
+	Sfx.play("ui_move")
+	_refresh_helper()
+	_sync()
+	get_viewport().set_input_as_handled()
+
+
 func _process(delta: float) -> void:
 	_time += delta
 	_shake = maxf(0.0, _shake - delta * 3.0)
@@ -247,11 +322,7 @@ func _process(delta: float) -> void:
 			_start()
 			return
 		elif source.just_pressed(&"dash"):
-			Sfx.play("ui_back")
-			if Net.online:
-				Net.return_to_lobby.rpc()
-			else:
-				Transition.go("res://scenes/lobby.tscn")
+			_go_back()
 			return
 	_cards.queue_redraw()
 

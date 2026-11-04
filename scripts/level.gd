@@ -54,6 +54,8 @@ var _last_score := 0
 var _finish_time := 0.0
 var _last_second := -1
 var _stars_played := 0
+var _pause_button: Button
+var _results_buttons: HBoxContainer
 
 
 func _ready() -> void:
@@ -128,6 +130,23 @@ func _ready() -> void:
 	_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud.draw.connect(_draw_hud)
 	layer.add_child(_hud)
+
+	# Botão de pausa para quem joga com o rato.
+	_pause_button = UiStyle.button("Pausa", _on_pause, 96, false)
+	_pause_button.theme = UiStyle.theme()
+	_pause_button.add_theme_font_size_override("font_size", 20)
+	_pause_button.position = Vector2(8, 680)
+	_pause_button.size = Vector2(96, 34)
+	_pause_button.custom_minimum_size = Vector2(96, 34)
+	layer.add_child(_pause_button)
+	_results_buttons = HBoxContainer.new()
+	_results_buttons.theme = UiStyle.theme()
+	_results_buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+	_results_buttons.add_theme_constant_override("separation", 14)
+	_results_buttons.position = Vector2(0, 596)
+	_results_buttons.size = Vector2(1280, 56)
+	_results_buttons.hide()
+	layer.add_child(_results_buttons)
 
 	_start_profiles()
 	var pause_layer := CanvasLayer.new()
@@ -339,6 +358,7 @@ func _finish() -> void:
 	_orders.active = false
 	Sfx.play("round_end")
 	Sfx.play("swoosh", -2.0, 0.0)
+	_show_results_buttons()
 	for chef in _kitchen.chefs:
 		chef.frozen = true
 		chef.celebrate = _tutorial != null or _stars() > 0 or (_endless and _orders.score > 0)
@@ -418,7 +438,7 @@ func _draw_hud() -> void:
 			_hud.draw_string(font, banner.position + Vector2(0, 106), _level["desc"], HORIZONTAL_ALIGNMENT_CENTER, banner.size.x, 18, Color(UiStyle.INK_SOFT, a * 0.8))
 	# FPS para medir o desempenho em PCs fracos.
 	if Gfx.show_fps:
-		_hud.draw_string(font, Vector2(8, 712), "FPS %d" % Engine.get_frames_per_second(),
+		_hud.draw_string(font, Vector2(112, 712), "FPS %d" % Engine.get_frames_per_second(),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, UiStyle.MUTED)
 	if _finished:
 		_draw_results()
@@ -710,7 +730,7 @@ func _context_actions(chef: Chef, st: Station) -> Array:
 			out.append([&"pick", "Pegar prato"])
 		elif st.item:
 			if st is BoardStation and st.item.can_chop():
-				out.append([&"use", "Cortar"])
+				out.append([&"use", "Cortar" if st.item.count <= 1 else "Cortar os %d" % st.item.count])
 			out.append([&"pick", "Pegar"])
 		return out
 	if st is TableStation:
@@ -731,10 +751,16 @@ func _context_actions(chef: Chef, st: Station) -> Array:
 			out.append([&"pick", "Juntar"])
 		elif st.item and held.is_plate() and st.item.cook_state == StoveStation.State.READY:
 			out.append([&"pick", "Servir no prato"])
-	elif st is CrateStation or st is RegisterStation or st is PlateStation:
+	elif st is CrateStation:
+		var crate := st as CrateStation
+		if held.is_ingredient() and held.kind == crate.ingredient and not held.chopped and held.count < held.max_count():
+			out.append([&"pick", "Pegar mais um (%d/%d)" % [held.count + 1, held.max_count()]])
+	elif st is RegisterStation or st is PlateStation:
 		pass
 	elif st.item == null:
 		out.append([&"pick", "Pousar"])
+	elif held.can_merge(st.item):
+		out.append([&"pick", "Juntar (%d)" % (held.count + st.item.count)])
 	elif held.is_plate() or st.item.is_plate() or st.item.is_cookware():
 		out.append([&"pick", "Juntar"])
 	return out
@@ -878,6 +904,35 @@ func _draw_results() -> void:
 	else:
 		_prompt(Vector2(x + w / 2.0, y + 372), "{pick} Jogar outra vez")
 		_prompt(Vector2(x + w / 2.0, y + 412), "{dash} Escolher nível")
+
+
+## Botões do fim para quem joga com o rato (o comando usa ✕, △ e ○).
+func _show_results_buttons() -> void:
+	_pause_button.hide()
+	if Net.is_client():
+		return
+	var add := func(text: String, cb: Callable, w: float):
+		_results_buttons.add_child(UiStyle.button(text, func():
+			_finish_time = maxf(_finish_time, 1.0)
+			cb.call(), w, false))
+	if _tutorial:
+		add.call("Ir jogar", _on_confirm, 220)
+		add.call("Menu principal", _on_results_back, 240)
+	elif _endless:
+		add.call("Escolher restaurante", _on_confirm, 300)
+	else:
+		if _has_next():
+			add.call("Próximo nível", _on_confirm, 240)
+			add.call("Repetir", _on_retry, 180)
+		else:
+			add.call("Jogar outra vez", _on_confirm, 240)
+		add.call("Escolher nível", _on_results_back, 220)
+	# Aparecem depois das estrelas.
+	_results_buttons.modulate.a = 0.0
+	_results_buttons.show()
+	var t := create_tween()
+	t.tween_interval(1.6)
+	t.tween_property(_results_buttons, "modulate:a", 1.0, 0.3)
 
 
 ## Há um nível a seguir, e já está aberto (ganhou-se pelo menos uma estrela)?

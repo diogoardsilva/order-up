@@ -96,7 +96,7 @@ func _draw_card() -> void:
 	var font := UiStyle.FONT
 	var dishes := Levels.dishes(level)
 	var rows := dishes.size()
-	var h := 120.0 + rows * 62.0
+	var h := 172.0 + rows * 62.0
 	var rect := Rect2(Vector2.ZERO, Vector2(_card.size.x, minf(h, _card.size.y)))
 	_card.draw_style_box(UiStyle.paper_box(), rect)
 	# Picotado em cima, como num bloco de comandas.
@@ -120,6 +120,11 @@ func _draw_card() -> void:
 		_card.draw_string(font, Vector2(96, y + 48), recipe["hint"], HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 120, 18, UiStyle.INK_SOFT)
 		_card.draw_string(font, Vector2(rect.size.x - 110, y + 24), "%d pts" % recipe["points"], HORIZONTAL_ALIGNMENT_RIGHT, 86, 20, UiStyle.INK_SOFT)
 		y += 62.0
+	# Dicas da 0.6: doses duplas e vários ingredientes na mão.
+	var tip_y := minf(y + 20.0, rect.size.y - 34.0)
+	_card.draw_line(Vector2(24, tip_y - 14), Vector2(rect.size.x - 24, tip_y - 14), Color(UiStyle.INK, 0.2), 2.0)
+	_card.draw_string(font, Vector2(24, tip_y + 4), "Dica: com o dobro dos ingredientes na panela saem 2 pratos.", HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 48, 18, UiStyle.INK_SOFT)
+	_card.draw_string(font, Vector2(24, tip_y + 26), "Pega outra vez na caixa para levar 2 ou 4 iguais; na tábua cortam-se todos.", HORIZONTAL_ALIGNMENT_LEFT, rect.size.x - 48, 18, UiStyle.INK_SOFT)
 
 
 func is_open() -> bool:

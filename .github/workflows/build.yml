@@ -70,6 +70,10 @@ jobs:
             fi
           done
           grep -E "Parse Error|Failed to load script" import.log && fail=1
+          # Testes da lógica (níveis, doses duplas, vários ingredientes na mão).
+          timeout 120 $godot --headless res://tests/logic_test.tscn > test.log 2>&1 || true
+          grep -E "TEST FAIL|TESTS|SCRIPT ERROR|Parse Error" test.log || echo "::error::Os testes não correram"
+          grep -q "TESTS OK" test.log || fail=1
           exit $fail
 
       - name: Export

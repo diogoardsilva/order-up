@@ -116,22 +116,30 @@ static func by_id(id: String) -> Dictionary:
 	return {}
 
 
-## A receita de fogão que estes ingredientes completam, ou {}.
+## A receita de fogão que estes ingredientes completam, ou {}. Com o dobro
+## dos ingredientes dá 2 doses: o resultado traz "portions" (1 ou 2).
 static func cook_match(contents: Array) -> Dictionary:
 	var sorted := contents.duplicate()
 	sorted.sort()
-	for cook in COOK:
-		var needs: Array = cook["in"].duplicate()
-		needs.sort()
-		if needs == sorted:
-			return cook
+	for portions in [1, 2]:
+		for cook in COOK:
+			var needs: Array = []
+			for k in portions:
+				needs.append_array(cook["in"])
+			needs.sort()
+			if needs == sorted:
+				var result: Dictionary = cook.duplicate()
+				result["portions"] = portions
+				return result
 	return {}
 
 
-## Estes ingredientes ainda podem vir a ser alguma receita de fogão?
+## Estes ingredientes ainda podem vir a ser alguma receita de fogão (uma ou
+## duas doses)?
 static func cook_possible(contents: Array) -> bool:
 	for cook in COOK:
 		var left: Array = cook["in"].duplicate()
+		left.append_array(cook["in"])
 		var ok := true
 		for id in contents:
 			if not left.has(id):
@@ -147,6 +155,7 @@ static func cook_possible(contents: Array) -> bool:
 static func cook_tool(contents: Array) -> String:
 	for cook in COOK:
 		var left: Array = cook["in"].duplicate()
+		left.append_array(cook["in"])
 		var ok := true
 		for id in contents:
 			if not left.has(id):

@@ -674,10 +674,16 @@ func interact(chef: Chef, cell: Vector2i) -> void:
 			if chef.held == null:
 				chef.held = item
 				floor_items.remove_at(i)
+			elif chef.held.can_merge(item):
+				chef.held.count += item.count
+				floor_items.remove_at(i)
 			elif chef.held.is_plate() and chef.held.try_add(item.content_id()):
-				floor_items.remove_at(i)
-			elif chef.held.is_cookware() and chef.held.cook_add(item.content_id()):
-				floor_items.remove_at(i)
+				if not item.take_one():
+					floor_items.remove_at(i)
+			elif chef.held.is_cookware():
+				var rest := chef.held.cook_add_all(item)
+				if rest == null:
+					floor_items.remove_at(i)
 		return
 	if door_button and station and cell == _door():
 		door_used.emit(chef)
@@ -864,7 +870,7 @@ func _customer_event(customer: Customer, before: int) -> void:
 ## O que está numa estação, para se saber quando muda.
 func _station_key(station: Station) -> String:
 	var it := station.item
-	var k := "" if it == null else "%s%s%s%d%d" % [it.kind, it.chopped, it.contents, it.cook_state, it.stack]
+	var k := "" if it == null else "%s%s%s%d%d%d%d" % [it.kind, it.chopped, it.contents, it.cook_state, it.stack, it.count, it.portions]
 	if station is SinkStation:
 		k += "s%d" % (station as SinkStation).dirty
 	elif station is PlateStation:

@@ -132,7 +132,7 @@ static func item_name(item: Item) -> String:
 	if item == null:
 		return ""
 	if item.is_ingredient():
-		return content_name(item.content_id())
+		return ("%d× " % item.count if item.count > 1 else "") + content_name(item.content_id())
 	if item.is_glass():
 		var drink := content_name(item.contents[0]) if not item.contents.is_empty() else "Copo"
 		return drink + (" e " + item_name(item.second) if item.second else "")
@@ -150,6 +150,8 @@ static func item_name(item: Item) -> String:
 		var tool: String = {"pot": "Panela", "pan": "Frigideira", "oven": "Forno"}.get(item.tool, "Panela")
 		match item.cook_state:
 			Item.Cook.READY:
+				if item.portions > 1:
+					return "%s: %d× %s (2 pratos)" % [tool, item.portions, content_name(item.product)]
 				return "%s: %s pronto" % [tool, content_name(item.product)]
 			Item.Cook.BURNT:
 				return "%s: queimado!" % tool

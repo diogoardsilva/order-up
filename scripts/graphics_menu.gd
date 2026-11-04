@@ -52,6 +52,12 @@ func _add_row(parent: Control, id: String) -> void:
 	b.add_theme_font_size_override("font_size", 22)
 	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	b.gui_input.connect(func(event: InputEvent):
+		# Rato: botão direito (ou a roda) anda para trás.
+		var mb := event as InputEventMouseButton
+		if mb and mb.pressed and mb.button_index in [MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+			_change(id, 1 if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN else -1)
+			b.accept_event()
+			return
 		if event.is_action_pressed("ui_left"):
 			_change(id, -1)
 			b.accept_event()

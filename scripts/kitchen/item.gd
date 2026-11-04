@@ -13,7 +13,11 @@ const MAX_STACK := 4
 enum Cook { EMPTY, FILLING, COOKING, READY, BURNT }
 const COOK_TIME := 6.0
 const BURN_TIME := 8.0
-const COOK_MAX := 3
+## Até 2 doses de uma vez: o dobro dos ingredientes dá 2 pratos.
+const COOK_MAX := 6
+const MAX_PORTIONS := 2
+## Quantos ingredientes iguais se levam na mão: 4 dos pequenos, 2 dos grandes.
+const BIG_INGREDIENTS: Array[String] = ["lettuce", "kale", "cod", "salmon", "steak", "dough", "pasta", "rice", "noodles"]
 
 ## "plate", "cookware" ou o id do ingrediente cru, ex. "tomato".
 var kind: String
@@ -25,6 +29,10 @@ var dirty := false
 var contents: Array[String] = []
 ## Só para pratos vazios: quantos estão empilhados (1 a 4).
 var stack := 1
+## Só para ingredientes: quantos iguais (ex. 2 queijos). Ver max_count().
+var count := 1
+## Só para panelas prontas: quantos pratos ainda dá (1 ou 2).
+var portions := 1
 ## Só para pratos com comida: um segundo prato levado na outra mão.
 var second: Item
 ## Só para panelas.
@@ -71,7 +79,7 @@ static func serialize(item: Item) -> Variant:
 	if item == null:
 		return null
 	return [item.kind, item.chopped, item.contents, item.dirty, item.stack, serialize(item.second),
-		item.cook_state, item.cook_timer, item.product, item.tool]
+		item.cook_state, item.cook_timer, item.product, item.tool, item.count, item.portions]
 
 
 static func deserialize(data: Variant) -> Item:
@@ -87,6 +95,9 @@ static func deserialize(data: Variant) -> Item:
 	item.cook_timer = data[7]
 	item.product = data[8]
 	item.tool = data[9]
+	if data.size() > 11:
+		item.count = data[10]
+		item.portions = data[11]
 	return item
 
 
@@ -124,6 +135,23 @@ func content_id() -> String:
 	return kind + ("_chopped" if chopped else "")
 
 
+## Quantos destes se levam de uma vez na mão.
+func max_count() -> int:
+	return 2 if BIG_INGREDIENTS.has(kind) else 4
+
+
+## Junta outro ingrediente igual a este molho. Devolve true se coube todo.
+func can_merge(other: Item) -> bool:
+	return other != null and is_ingredient() and other.is_ingredient() and other.kind == kind \
+		and other.chopped == chopped and count + other.count <= max_count()
+
+
+## Tira um deste molho (ex. para pôr num prato). Devolve false se era o último.
+func take_one() -> bool:
+	count -= 1
+	return count > 0
+
+
 func can_chop() -> bool:
 	return is_ingredient() and not chopped and Recipes.CHOPPABLE.has(kind)
 
@@ -143,7 +171,8 @@ func try_add(id: String) -> bool:
 
 # --- Panelas -----------------------------------------------------------------
 
-## Junta um ingrediente à panela, se ainda pode vir a ser uma receita.
+## Junta um ingrediente à panela, se ainda pode vir a ser uma receita
+## (uma ou duas doses).
 func cook_add(id: String) -> bool:
 	if not is_cookware() or not cook_state in [Cook.EMPTY, Cook.FILLING, Cook.COOKING] or contents.size() >= COOK_MAX:
 		return false
@@ -159,14 +188,29 @@ func cook_add(id: String) -> bool:
 	else:
 		cook_state = Cook.COOKING
 		product = cook["out"]
+		portions = cook.get("portions", 1)
 	return true
+
+
+## Põe na panela todos os que couberem de um molho de ingredientes. Devolve
+## o que sobra na mão (ou null se foram todos).
+func cook_add_all(held: Item) -> Item:
+	while held != null and cook_add(held.content_id()):
+		if not held.take_one():
+			held = null
+	return held
+
+
+## Tempo a cozinhar: duas doses demoram um bocadinho mais.
+func cook_time() -> float:
+	return COOK_TIME * (1.0 + 0.4 * (portions - 1))
 
 
 ## Só coze em cima de um fogão.
 func cook_tick(delta: float) -> void:
 	if cook_state == Cook.COOKING:
 		cook_timer += delta
-		if cook_timer >= COOK_TIME:
+		if cook_timer >= cook_time():
 			cook_state = Cook.READY
 			cook_timer = 0.0
 	elif cook_state == Cook.READY:
@@ -176,7 +220,7 @@ func cook_tick(delta: float) -> void:
 
 
 func cook_progress() -> float:
-	return cook_timer / COOK_TIME if cook_state == Cook.COOKING else -1.0
+	return cook_timer / cook_time() if cook_state == Cook.COOKING else -1.0
 
 
 func is_burning_soon() -> bool:
@@ -186,7 +230,10 @@ func is_burning_soon() -> bool:
 ## Serve o que está pronto para um prato. Devolve true se serviu.
 func pour_into(plate_item: Item) -> bool:
 	if is_cookware() and cook_state == Cook.READY and plate_item.try_add(product):
-		empty_cookware()
+		# Com duas doses fica a outra na panela.
+		portions -= 1
+		if portions <= 0:
+			empty_cookware()
 		return true
 	return false
 
@@ -196,6 +243,7 @@ func empty_cookware() -> void:
 	cook_state = Cook.EMPTY
 	cook_timer = 0.0
 	product = ""
+	portions = 1
 
 
 ## Desenho atual: panela, frigideira ou forno.
