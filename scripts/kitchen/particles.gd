@@ -8,6 +8,7 @@ const MAX := 300
 const CHOP_COLORS := {
 	"tomato": Color("e04a3f"), "lettuce": Color("6cbf4a"), "kale": Color("3a7f2f"), "potato": Color("f2d48a"),
 	"cod": Color("f1eef6"), "salmon": Color("f59a6a"), "cucumber": Color("7fc25a"), "cheese": Color("f6c444"),
+	"mushroom": Color("b8946a"), "onion": Color("f0dcc8"),
 }
 
 var _items: Array[Dictionary] = []

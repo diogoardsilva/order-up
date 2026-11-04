@@ -39,10 +39,10 @@ func _ready() -> void:
 		_slots.append(slot)
 
 	# Legendas com os botões desenhados como no comando (ou teclado).
-	var help := PromptBar.new([[&"pick", "Entrar"], [&"move", "Chef (⇆) e papel (⇅)"], [&"throw", "Perfil"], [&"dash", "Sair"], [&"pause", "Começar"]])
+	var help := PromptBar.new([[&"pick", "Entrar"], [&"move", "Chef (⇆) e papel (⇅)"], [&"throw", "Perfil"], [&"dash", "Sair / voltar"], [&"pause", "Começar"]])
 	help.custom_minimum_size = Vector2(1280, 44)
 	root.add_child(help)
-	var help2 := UiStyle.label("Sem ninguém no lobby, Começar volta ao menu.", 18, UiStyle.MUTED, 4)
+	var help2 := UiStyle.label("Sem ninguém no lobby, Sair / voltar volta ao menu principal.", 18, UiStyle.MUTED, 4)
 	root.add_child(help2)
 	_pads_label = UiStyle.label("", 18, UiStyle.MUTED, 6)
 	root.add_child(_pads_label)
@@ -91,11 +91,17 @@ func _process(_delta: float) -> void:
 		elif joined and source.just_pressed(&"dash"):
 			PlayerRegistry.leave(source)
 			Sfx.play("ui_back")
-		elif source.just_pressed(&"pause"):
-			if PlayerRegistry.players.is_empty() or (Net.is_client() and not joined):
+		elif not joined and source.just_pressed(&"dash"):
+			# A bola volta atrás: sem ninguém no lobby (ou num PC que só está a ver), volta ao menu.
+			if PlayerRegistry.players.is_empty() or (Net.online and not _has_local_player()):
 				Net.leave()
 				Sfx.play("ui_back")
 				Transition.go("res://scenes/main_menu.tscn")
+				return
+		elif source.just_pressed(&"pause"):
+			# Start só serve para começar.
+			if PlayerRegistry.players.is_empty() or (Net.is_client() and not joined):
+				Sfx.play("ui_back")
 			elif GameState.mode == GameState.Mode.TUTORIAL and not Net.online:
 				# O tutorial é sempre no primeiro restaurante.
 				Sfx.play("ui_confirm")
@@ -108,6 +114,13 @@ func _process(_delta: float) -> void:
 				Sfx.play("ui_confirm")
 				Transition.go("res://scenes/level_select.tscn")
 			return
+
+
+func _has_local_player() -> bool:
+	for p in PlayerRegistry.players:
+		if not p["source"] is RemoteSource:
+			return true
+	return false
 
 
 func _room_text() -> String:

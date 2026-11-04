@@ -6,6 +6,9 @@ extends CharacterBody2D
 
 signal pause_requested
 signal confirm_pressed
+## No ecrã do fim: ○ volta à escolha do nível e △ repete.
+signal back_pressed
+signal retry_pressed
 signal interact_requested
 signal throw_requested
 
@@ -132,6 +135,10 @@ func _local_update(delta: float) -> void:
 		use_down = false
 		if source.just_pressed(&"pick"):
 			confirm_pressed.emit()
+		elif source.just_pressed(&"dash"):
+			back_pressed.emit()
+		elif source.just_pressed(&"throw"):
+			retry_pressed.emit()
 		return
 
 	var input := source.move

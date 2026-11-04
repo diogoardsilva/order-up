@@ -1204,12 +1204,234 @@ def oven():
     return s.outline()
 
 
+# --- Comida nova da 0.6 ---------------------------------------------------------
+
+MUSH = ["#f6e6d0", "#e0c4a0", "#b8946a", "#8a6a48", "#5e4630"]
+SHRIMP = ["#ffd6c0", "#ffa880", "#f07a50", "#c45634"]
+ONION = ["#fff4e8", "#f0dcc8", "#d8b8a0", "#b08a70"]
+SAUSAGE = ["#f6a088", "#d8705a", "#b04e40", "#7e3428"]
+BROTH = ["#f8d8a0", "#e8b870", "#c8904a", "#a06a30"]
+
+
+def bread():
+    """Pão (carcaça)."""
+    s = Spr(14, 10)
+    s.ellipse(7, 5.5, 6, 3.8, GOLD)
+    s.vline(7, 3, 4, GOLD[3]); s.px(6, 3, GOLD[0]); s.px(4, 4, GOLD[0])
+    return s.outline()
+
+
+def mushroom():
+    s = Spr(13, 12)
+    s.rect(5, 6, 3, 5, MUSH[0]); s.vline(7, 6, 5, MUSH[1])
+    s.ellipse(6.5, 5, 5.5, 3.6, BROWN)
+    for x, y in [(4, 3), (8, 4), (6, 2)]:
+        s.px(x, y, BROWN[0])
+    return s.outline()
+
+
+def mushroom_chopped():
+    s = Spr(12, 11)
+    for cx, cy in [(3.5, 3.5), (8.5, 4), (5.5, 7.5)]:
+        s.ellipse(cx, cy, 2.6, 1.8, [MUSH[0], MUSH[1], BROWN[2]], flat=True)
+        s.px(int(cx), int(cy) + 1, MUSH[2])
+    return s.outline()
+
+
+def shrimp():
+    s = Spr(14, 11)
+    for i in range(7):
+        a = math.pi * 0.1 + i * 0.36
+        s.ellipse(7 + math.cos(a) * 4, 5.5 - math.sin(a) * 3.2, 2.3 - i * 0.12, 2.1 - i * 0.12, SHRIMP[1:], flat=True)
+    for i in range(1, 6):
+        a = math.pi * 0.1 + i * 0.36
+        s.px(int(7 + math.cos(a) * 4), int(5.5 - math.sin(a) * 3.2), SHRIMP[0])
+    s.px(2, 8, SHRIMP[3]); s.px(1, 9, SHRIMP[3]); s.px(3, 9, SHRIMP[3])
+    s.px(10, 4, "#3b2027")
+    return s.outline()
+
+
+def noodles():
+    """Ninho de massa ramen."""
+    s = Spr(14, 11)
+    s.ellipse(7, 5.5, 6, 4.2, GOLD[:4], flat=True)
+    for i in range(10):
+        a = i * 0.9
+        s.px(int(7 + math.cos(a) * (1 + i * 0.4)), int(5.5 + math.sin(a) * (0.8 + i * 0.3)), GOLD[3])
+    return s.outline()
+
+
+def sausage():
+    s = Spr(15, 8)
+    s.ellipse(7.5, 4, 6.5, 2.4, SAUSAGE)
+    s.px(5, 3, SAUSAGE[0]); s.px(9, 3, SAUSAGE[0])
+    return s.outline()
+
+
+def onion():
+    s = Spr(13, 13)
+    s.ellipse(6.5, 7.5, 5.2, 4.8, ["#f8e0b0", "#e8b878", "#c88a48", "#9a6030"])
+    s.vline(6, 1, 3, GREEN[2]); s.px(7, 2, GREEN[1])
+    for y in range(4, 11, 2):
+        s.px(5, y, "#f8e8c8")
+    return s.outline()
+
+
+def onion_chopped():
+    s = Spr(12, 11)
+    for cx, cy in [(3.5, 3.5), (8.5, 4.5), (5.5, 8)]:
+        s.ellipse(cx, cy, 2.8, 2.4, ONION, flat=True)
+        s.ellipse(cx, cy, 1.4, 1.2, [ONION[2]], flat=True)
+    return s.outline()
+
+
+def toast():
+    s = Spr(14, 12)
+    s.rect(1, 2, 12, 9, GOLD[2]); s.rect(2, 3, 10, 7, GOLD[1])
+    s.hline(1, 6, 12, YOLK[1]); s.px(3, 7, YOLK[1]); s.px(9, 7, YOLK[1])
+    s.hline(1, 6, 12, YOLK[1]); s.hline(2, 5, 10, "#f0a0a0")
+    for x in (4, 7, 10):
+        s.px(x, 3, GOLD[3]); s.px(x - 1, 4, GOLD[3])
+    return s.outline()
+
+
+def omelette():
+    s = Spr(15, 10)
+    s.ellipse(7.5, 5, 6.5, 3.8, YOLK[:3] + ["#d8a030"])
+    s.px(5, 3, "#fff8d0"); s.px(9, 4, YOLK[3]); s.px(7, 6, YOLK[3])
+    s.px(4, 5, GREEN[2]); s.px(10, 5, GREEN[2])
+    return s.outline()
+
+
+def mush_soup():
+    s = Spr(13, 9)
+    s.ellipse(6.5, 4.5, 5.5, 3.6, ["#f0dcc0", "#d8bc98", "#b89670", "#8a6a48"], flat=True)
+    s.px(4, 3, MUSH[3]); s.px(5, 3, MUSH[3]); s.px(8, 5, MUSH[3])
+    s.px(7, 3, "#ffffff"); s.px(8, 3, "#ffffff")
+    return s.outline()
+
+
+def nata():
+    s = Spr(12, 10)
+    s.ellipse(6, 5, 5, 4, GOLD[1:])
+    s.ellipse(6, 4.6, 3.4, 2.6, YOLK, flat=True)
+    s.px(5, 4, "#4a2a14"); s.px(7, 5, "#6a3a1a"); s.px(6, 3, "#8a4a1a")
+    return s.outline()
+
+
+def tempura():
+    s = Spr(15, 10)
+    for cx, cy in [(5, 5), (10, 4.5)]:
+        s.ellipse(cx, cy, 4, 2.6, GOLD)
+        s.px(int(cx) - 1, int(cy) - 1, "#fff8e0"); s.px(int(cx) + 1, int(cy), GOLD[3])
+    s.px(13, 2, SHRIMP[2]); s.px(14, 1, SHRIMP[2]); s.px(1, 6, SHRIMP[2])
+    return s.outline()
+
+
+def ramen():
+    s = Spr(14, 11)
+    s.ellipse(7, 5.5, 6, 4.4, BROTH, flat=True)
+    for x in range(3, 11, 2):
+        s.vline(x, 4, 3, GOLD[1])
+    s.ellipse(9.5, 4, 1.8, 1.5, ["#ffffff", "#ffffff"], flat=True); s.px(9, 4, YOLK[1]); s.px(10, 4, YOLK[1])
+    s.px(4, 3, GREEN[1]); s.px(5, 3, GREEN[2]); s.rect(3, 6, 2, 2, NORI[1])
+    return s.outline()
+
+
+def sausage_cooked():
+    s = Spr(15, 8)
+    s.ellipse(7.5, 4, 6.5, 2.4, ["#d88a60", "#b0603e", "#8a4430", "#5e2c20"])
+    for x in (4, 7, 10):
+        s.px(x, 3, "#5e2c20"); s.px(x + 1, 4, "#5e2c20")
+    return s.outline()
+
+
+def onion_rings():
+    s = Spr(16, 11)
+    for cx, cy in [(5, 4.5), (11, 4.5), (8, 7)]:
+        s.ellipse(cx, cy, 4, 3.2, GOLD)
+    for cx, cy in [(5, 4.5), (11, 4.5), (8, 7.2)]:
+        s.ellipse(cx, cy, 1.5, 1.1, ["#f8e8c8", "#f0dcc8"], flat=True)
+    return s.outline()
+
+
+def risotto():
+    s = Spr(13, 9)
+    s.ellipse(6.5, 4.5, 5.5, 3.6, ["#fff6dc", "#f6e6b8", "#e6cf98", "#c8ac70"], flat=True)
+    for x, y in [(4, 3), (8, 4), (6, 5), (9, 2)]:
+        s.px(x, y, MUSH[3])
+    s.px(5, 4, GREEN[2]); s.px(7, 3, GREEN[2])
+    return s.outline()
+
+
+def lasagna():
+    s = Spr(14, 11)
+    s.rect(1, 2, 12, 8, GOLD[2])
+    for y, c in [(3, SAUCE[1]), (4, "#fff3c0"), (5, GOLD[1]), (6, SAUCE[1]), (7, "#fff3c0"), (8, GOLD[2])]:
+        s.hline(2, y, 10, c)
+    s.hline(1, 2, 12, YOLK[1]); s.px(4, 2, "#c88a30"); s.px(9, 2, "#c88a30")
+    return s.outline()
+
+
+def funghi():
+    s = Spr(16, 13)
+    s.ellipse(8, 6.5, 7, 5.6, DOUGH[1:] + [DOUGH[3]], flat=True)
+    s.ellipse(8, 6.5, 5.6, 4.4, ["#fff8e6", "#fff8e6", "#f6e6c4"], flat=True)
+    for cx, cy in [(6, 5), (10, 6), (7, 8), (9, 4)]:
+        s.ellipse(cx, cy, 1.4, 1.0, [BROWN[1], BROWN[2]], flat=True)
+    s.px(8, 6, GREEN[2]); s.px(11, 8, GREEN[2])
+    return s.outline()
+
+
+def dish_prego():
+    s = Spr(15, 11)
+    s.ellipse(7.5, 4, 6.2, 3, GOLD)
+    s.px(5, 3, GOLD[0]); s.px(9, 2, GOLD[0])
+    s.rect(1, 6, 13, 2, COOKED[2]); s.px(3, 6, COOKED[4]); s.px(10, 7, COOKED[4])
+    s.rect(1, 8, 13, 2, GOLD[2]); s.hline(1, 9, 13, GOLD[3])
+    return s.outline()
+
+
+def dish_hotdog():
+    s = Spr(16, 9)
+    s.ellipse(8, 5, 7, 3, GOLD)
+    s.ellipse(8, 4, 6.4, 1.6, ["#d88a60", "#b0603e", "#8a4430"])
+    for x in range(3, 13, 2):
+        s.px(x, 3 + (x // 2) % 2, YOLK[1])
+    return s.outline()
+
+
+def dish_cheese_fries():
+    s = fries()
+    s2 = Spr(13, 12)
+    s2.paste(s, 0, 0)
+    for x, y in [(2, 5), (4, 4), (6, 6), (8, 4), (10, 5), (5, 7), (9, 7)]:
+        s2.px(x, y, YOLK[1]); s2.px(x, y + 1, YOLK[2])
+    return s2
+
+
+def dish_uramaki():
+    s = Spr(16, 8)
+    for x in (2.5, 8, 13.5):
+        s.ellipse(x, 4, 2.6, 2.6, ["#ffffff", "#ffffff", RICE[2]], flat=True)
+        s.ellipse(x, 4, 1.5, 1.5, [NORI[1]], flat=True)
+        s.px(int(x), 4, GOLD[1]); s.px(int(x) - 1, 3, "#3b2027")
+    return s.outline()
+
+
+FOOD_V06 = [
+    bread, mushroom, mushroom_chopped, shrimp, noodles, sausage, onion, onion_chopped,
+    toast, omelette, mush_soup, nata, tempura, ramen, sausage_cooked, onion_rings,
+    risotto, lasagna, funghi, dish_prego, dish_hotdog, dish_cheese_fries, dish_uramaki,
+]
+
+
 FOOD = [
     potato, egg, steak, cod, kale, rice, salmon, nori, cucumber, bun, patty, cheese, pasta, dough,
     potato_chopped, cod_chopped, salmon_chopped, cucumber_chopped, cheese_chopped, kale_chopped,
     steak_cooked, egg_fried, fries, bras, caldo, rice_cooked, patty_cooked, pizza, pasta_cooked,
     dish_burger, dish_cheeseburger, dish_nigiri, dish_maki, dish_bitoque,
-]
+] + FOOD_V06
 
 
 # --- Temas dos restaurantes (salão) ------------------------------------------
@@ -1588,4 +1810,12 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    if "--food-v06" in sys.argv:
+        # Só a comida nova (não reescreve os sprites que já existem).
+        (OUT / "food").mkdir(exist_ok=True)
+        for fn in FOOD_V06:
+            fn().im.save(OUT / "food" / f"{fn.__name__}.png")
+        print("Comida nova escrita em", OUT / "food")
+    else:
+        main()

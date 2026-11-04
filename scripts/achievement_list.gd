@@ -54,6 +54,12 @@ static func _build() -> void:
 		var lid: String = level["id"]
 		var lname: String = level["name"]
 		_add("lv_%s_s3" % lid, "%s: 3 estrelas" % lname, "Ganhar 3 estrelas em %s." % lname, "lv_%s_stars_best" % lid, 3, "star")
+		# 0.6: o último nível de cada restaurante (a noite de festa).
+		var final_name: String = level["stages"][Levels.STAGES - 1]["name"]
+		_add("lv_%s_final" % lid, "%s: %s" % [lname, final_name], "Ganhar uma estrela no último nível de %s." % lname,
+			"lv_%s_%d_stars_best" % [lid, Levels.STAGES], 1, "hat")
+		_add("lv_%s_final3" % lid, "%s: perfeição" % lname, "Ganhar 3 estrelas no último nível de %s." % lname,
+			"lv_%s_%d_stars_best" % [lid, Levels.STAGES], 3, "star", true)
 	_add("endless_10", "Até fechar", "Ficar 10 minutos com a Casa Aberta.", "endless_minutes_best", 10, "door")
 	_add("endless_30", "Nunca fecha", "Ficar 30 minutos com a Casa Aberta.", "endless_minutes_best", 30, "door")
 	# --- Equipa e modos -------------------------------------------------------

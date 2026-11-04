@@ -1333,9 +1333,9 @@ func _draw_stove(stove: StoveStation, rect: Rect2) -> void:
 
 func _make_station(c: String) -> Station:
 	match c:
-		"a", "b", "c", "d", "e":
+		"a", "b", "c", "d", "e", "f", "g":
 			var crates: Array = level["crates"]
-			var index := "abcde".find(c)
+			var index := Levels.CRATE_LETTERS.find(c)
 			return CrateStation.new(crates[index]) if index < crates.size() else Station.new()
 		"N": return TableStation.new()
 		"B": return BoardStation.new()
