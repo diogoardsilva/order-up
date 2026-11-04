@@ -55,6 +55,22 @@ jobs:
           dest=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
           mkdir -p "$dest" && cp ~/godot/templates/* "$dest/"
 
+      - name: Check scripts (abre cada ecrã uns segundos e procura erros)
+        if: matrix.platform == 'linux'
+        run: |
+          godot=~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
+          $godot --headless --import > import.log 2>&1 || true
+          fail=0
+          for scene in main_menu lobby level_select level; do
+            timeout 120 $godot --headless --quit-after 400 res://scenes/$scene.tscn > run_$scene.log 2>&1 || true
+            if grep -E "SCRIPT ERROR|Parse Error|Invalid call|Invalid access|Invalid assignment|Cannot call|Failed to load script" run_$scene.log; then
+              echo "::error::Erros ao abrir $scene"
+              fail=1
+            fi
+          done
+          grep -E "Parse Error|Failed to load script" import.log && fail=1
+          exit $fail
+
       - name: Export
         run: |
           godot=~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
