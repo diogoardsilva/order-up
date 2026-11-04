@@ -5,8 +5,9 @@ extends Node2D
 ## diretamente; no M2 estes pedidos passam a ir por rede para o anfitrião.
 
 const TILE := 24
-## A planta está em Levels.LAYOUT (igual em todos os restaurantes).
-const LAYOUT := Levels.LAYOUT
+## A planta deste nível (Levels.layout_for): a cozinha é sempre igual e o
+## salão cresce de nível para nível.
+var layout: Array[String] = Levels.LAYOUT.duplicate()
 
 ## Coluna a partir da qual começa o salão.
 const DINING_FROM_X := 12
@@ -90,21 +91,24 @@ var door_button := false
 func _init(p_orders: OrderManager, p_level: Dictionary = Levels.ALL[0]) -> void:
 	orders = p_orders
 	level = p_level
+	if level.has("layout"):
+		layout.assign(level["layout"])
 	orders.served.connect(func(at: Vector2):
 		show_fx(at, "Servido!", Color("f2c94c")))
 	orders.paid.connect(func(points: int, at: Vector2):
 		show_fx(at, "+%d" % points, Color("f2c94c"), true))
 	orders.failed.connect(func(at: Vector2):
 		show_fx(at, "-%d" % OrderManager.FAIL_PENALTY, Color("e8574d")))
-	for y in LAYOUT.size():
-		for x in LAYOUT[y].length():
-			var c := LAYOUT[y][x]
+	for y in layout.size():
+		for x in layout[y].length():
+			var c := layout[y][x]
 			var cell := Vector2i(x, y)
 			if c.is_valid_int():
 				spawns[c.to_int() - 1] = cell_center(cell)
 			elif c == "n":
 				# Metade de baixo da mesa de 4.
-				var top: TableStation = stations[cell + Vector2i.UP]
+				# Mesas compridas (6, 8, 10 lugares): várias células "n" seguidas.
+				var top: TableStation = stations[_alias.get(cell + Vector2i.UP, cell + Vector2i.UP)]
 				top.cells.append(cell)
 				top.seats.append(cell + Vector2i.LEFT)
 				top.seats.append(cell + Vector2i.RIGHT)
@@ -325,7 +329,7 @@ func _draw_heat() -> void:
 ## mudam as opções de gráficos.
 func _draw_floor() -> void:
 	var ci := _floor
-	var cols := LAYOUT[0].length()
+	var cols := layout[0].length()
 	ci.draw_rect(Rect2(Vector2(-200, -200), pixel_size() + Vector2(400, 400)), BG)
 	ci.draw_rect(Rect2(Vector2(-3, -BACK_WALL - 3), pixel_size() + Vector2(6, BACK_WALL + 6)), Color("1a0f12"))
 	for x in cols:
@@ -334,7 +338,7 @@ func _draw_floor() -> void:
 			ci.draw_texture(Art.BACKWALL_KITCHEN, at)
 		else:
 			ci.draw_texture_rect_region(Art.themed(_theme(), "wall_top"), Rect2(at, Vector2(TILE, BACK_WALL)), Rect2(0, 0, TILE, BACK_WALL))
-	for y in LAYOUT.size():
+	for y in layout.size():
 		for x in cols:
 			var tex := Art.themed(_theme(), "floor") if x >= DINING_FROM_X else Art.FLOOR
 			var n := tex.get_width() / TILE
@@ -350,8 +354,8 @@ func _draw_floor() -> void:
 func _draw_floor_detail(ci: CanvasItem) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 7
-	for y in LAYOUT.size():
-		for x in LAYOUT[y].length():
+	for y in layout.size():
+		for x in layout[y].length():
 			var cell := Vector2i(x, y)
 			if stations.has(cell) or _alias.has(cell):
 				continue
@@ -388,7 +392,7 @@ func _draw_kitchen_floor(ci: CanvasItem) -> void:
 	var mat := Color("6a5048")
 	var spans: Array[Rect2] = []
 	# Linhas de cima e de baixo: um tapete comprido em frente a cada grupo seguido de tábuas/fogões.
-	for y: int in [0, LAYOUT.size() - 1]:
+	for y: int in [0, layout.size() - 1]:
 		var row: int = y + 1 if y == 0 else y - 1
 		var start := -1
 		for x in range(DINING_FROM_X):
@@ -431,7 +435,7 @@ func _draw_kitchen_floor(ci: CanvasItem) -> void:
 func _draw_static_shadows(ci: CanvasItem) -> void:
 	if Gfx.shadows == 0:
 		return
-	var cols := LAYOUT[0].length()
+	var cols := layout[0].length()
 	var soft := Gfx.shadows >= 2
 	var length := 4 if Gfx.shadows >= 3 else 3
 	for station: Station in stations.values():
@@ -439,7 +443,7 @@ func _draw_static_shadows(ci: CanvasItem) -> void:
 		for cell in cells:
 			var below := cell + Vector2i.DOWN
 			var right := cell + Vector2i.RIGHT
-			var free_below := below.y < LAYOUT.size() and not stations.has(below) and not _alias.has(below)
+			var free_below := below.y < layout.size() and not stations.has(below) and not _alias.has(below)
 			var free_right := right.x < cols and not stations.has(right) and not _alias.has(right)
 			if not soft:
 				if free_below:
@@ -508,7 +512,7 @@ func _draw_lamp(center: Vector2) -> void:
 
 
 func pixel_size() -> Vector2:
-	return Vector2(LAYOUT[0].length(), LAYOUT.size()) * TILE
+	return Vector2(layout[0].length(), layout.size()) * TILE
 
 
 func cell_at(local_pos: Vector2) -> Vector2i:
@@ -559,7 +563,7 @@ func door_cell() -> Vector2i:
 
 func _door() -> Vector2i:
 	for station: Station in stations.values():
-		if LAYOUT[station.cell.y][station.cell.x] == "E":
+		if layout[station.cell.y][station.cell.x] == "E":
 			return station.cell
 	return Vector2i.ZERO
 
@@ -1015,7 +1019,7 @@ func _draw_station(station: Station) -> void:
 	var center := rect.get_center() + Vector2(0, -3)  # tampo da bancada (sem a frente)
 	if station is TableStation:
 		_draw_table(station as TableStation, rect)
-	elif LAYOUT[station.cell.y][station.cell.x] == "E":
+	elif layout[station.cell.y][station.cell.x] == "E":
 		# A porta abre-se quando entra um grupo.
 		var age := _time - _door_time
 		var open := 0.0 if age > 1.4 else sin(clampf(age / 1.4, 0.0, 1.0) * PI)
@@ -1123,7 +1127,7 @@ func _draw_pass(pass_station: PassStation, rect: Rect2) -> void:
 	draw_rect(Rect2(top.position, Vector2(top.size.x, 2)), Color("e4e8ee"))
 	draw_rect(Rect2(top.position + Vector2(0, top.size.y - 2), Vector2(top.size.x, 2)), Color("8a909c"))
 	var c := pass_station.cell
-	var middle: bool = c.y > 0 and c.y < LAYOUT.size() - 1 and LAYOUT[c.y - 1][c.x] == "H" and LAYOUT[c.y + 1][c.x] == "H"
+	var middle: bool = c.y > 0 and c.y < layout.size() - 1 and layout[c.y - 1][c.x] == "H" and layout[c.y + 1][c.x] == "H"
 	if middle and pass_station.item == null:
 		# Campainha dourada.
 		var b := rect.position + Vector2(12, 9)
@@ -1199,16 +1203,34 @@ func _draw_plant(at: Vector2) -> void:
 
 func _draw_wall(cell: Vector2i, rect: Rect2) -> void:
 	var below := cell + Vector2i.DOWN
-	var front := below.y < LAYOUT.size() and not stations.has(below)
+	var front := below.y < layout.size() and not stations.has(below)
 	draw_texture(Art.themed(_theme(), "wall_front" if front else "wall_top"), rect.position)
 
 
 func _draw_table(table: TableStation, rect: Rect2) -> void:
-	var big := table.capacity() > 2
-	draw_texture(Art.themed(_theme(), "table_big" if big else "table"), rect.position)
+	var n := table.cells.size()
+	var big := n > 1
+	if n <= 2:
+		draw_texture(Art.themed(_theme(), "table_big" if big else "table"), rect.position)
+	else:
+		# Mesa comprida (6 a 10 lugares): a ponta de cima, o meio repetido e a ponta de baixo.
+		var tex := Art.themed(_theme(), "table_big")
+		var w := float(tex.get_width())
+		var h := float(tex.get_height())
+		draw_texture_rect_region(tex, Rect2(rect.position, Vector2(w, TILE)), Rect2(0, 0, w, TILE))
+		for k in range(1, n - 1):
+			draw_texture_rect_region(tex, Rect2(rect.position + Vector2(0, k * TILE), Vector2(w, TILE)), Rect2(0, TILE / 2.0, w, TILE))
+		draw_texture_rect_region(tex, Rect2(rect.position + Vector2(0, (n - 1) * TILE), Vector2(w, h - TILE)), Rect2(0, TILE, w, h - TILE))
 	# Pratos espalhados pela mesa.
-	var spots := [Vector2(-4, -2), Vector2(4, 2), Vector2(-4, 22), Vector2(4, 26), Vector2(5, -6), Vector2(-5, 7), Vector2(5, 17), Vector2(-5, 30)] \
-		if big else [Vector2(-4, -2), Vector2(4, 2), Vector2(5, -6), Vector2(-5, 6)]
+	var spots := [Vector2(-4, -2), Vector2(4, 2), Vector2(5, -6), Vector2(-5, 6)]
+	if big:
+		spots.clear()
+		for k in n:
+			var dy := k * TILE
+			spots.append_array([Vector2(-4, -2 + dy), Vector2(4, 2 + dy)])
+		for k in n:
+			var dy := k * TILE
+			spots.append_array([Vector2(5, -6 + dy), Vector2(-5, 7 + dy)])
 	for i in table.items.size():
 		ItemArt.draw_item(self, table.items[i], rect.get_center() + Vector2(0, -3) + spots[i % spots.size()])
 
@@ -1270,14 +1292,19 @@ func _draw_customer(customer: Customer) -> void:
 		Customer.State.WAITING:
 			# Balão com os pratos que ainda faltam e a paciência.
 			var missing := customer.missing()
-			var bubble_center := head + Vector2(0, -14)
-			var w := maxf(22.0, missing.size() * 18.0 + 4.0)
-			_draw_bubble(bubble_center, w)
+			# Grupos grandes: os pratos em duas filas de até 5.
+			var per_row := mini(missing.size(), 5)
+			var lines := ceili(missing.size() / 5.0)
+			var bubble_center := head + Vector2(0, -14 - (lines - 1) * 16)
+			var w := maxf(22.0, per_row * 18.0 + 4.0)
+			_draw_bubble(bubble_center + Vector2(0, (lines - 1) * 8), w, 17.0 + (lines - 1) * 16.0)
 			for k in missing.size():
 				var plate := Item.for_recipe(missing[k])
-				ItemArt.draw_item(self, plate, bubble_center + Vector2((k - (missing.size() - 1) / 2.0) * 18.0, -1))
+				var row := k / 5
+				var in_row := mini(missing.size() - row * 5, 5)
+				ItemArt.draw_item(self, plate, bubble_center + Vector2((k % 5 - (in_row - 1) / 2.0) * 18.0, -1 + row * 16))
 			_draw_table_tag(customer.table.number, bubble_center + Vector2(0, -9))
-			_draw_patience(customer, bubble_center)
+			_draw_patience(customer, bubble_center + Vector2(0, (lines - 1) * 16))
 		Customer.State.EATING:
 			# Garfadas: corações pequenos de vez em quando.
 			if int(since * 2.0) % 3 == 0:
@@ -1308,15 +1335,15 @@ func _draw_table_tag(number: int, bottom_center: Vector2) -> void:
 
 
 ## Balão de fala com a largura pedida (para vários pratos).
-func _draw_bubble(center: Vector2, width: float) -> void:
-	if width <= 24.0:
+func _draw_bubble(center: Vector2, width: float, height := 17.0) -> void:
+	if width <= 24.0 and height <= 17.0:
 		Art.centered(self, Art.BUBBLE, center)
 		return
-	var rect := Rect2((center - Vector2(width / 2.0, 9)).round(), Vector2(width, 17))
+	var rect := Rect2((center - Vector2(width / 2.0, height / 2.0)).round(), Vector2(width, height))
 	draw_rect(rect.grow(1), UiStyle.INK)
 	draw_rect(rect, Color("fff8e6"))
-	draw_rect(Rect2(rect.position + Vector2(0, 13), Vector2(width, 4)), Color("f6e6c4"))
-	var tip := (center + Vector2(-2, 9)).round()
+	draw_rect(Rect2(rect.position + Vector2(0, height - 4), Vector2(width, 4)), Color("f6e6c4"))
+	var tip := (center + Vector2(-2, height / 2.0)).round()
 	draw_colored_polygon(PackedVector2Array([tip + Vector2(-3, 0), tip + Vector2(4, 0), tip + Vector2(0, 4)]), Color("f6e6c4"))
 
 

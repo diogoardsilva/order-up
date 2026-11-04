@@ -10,12 +10,16 @@ const ALL: Array[Dictionary] = [
 	{"id": "toast", "name": "Tosta mista", "hint": "pão + queijo cortado, frigideira", "needs": ["toast"], "points": 30},
 	{"id": "omelette", "name": "Omelete", "hint": "ovo + queijo cortado, frigideira", "needs": ["omelette"], "points": 30},
 	{"id": "mush_soup", "name": "Creme de cogumelos", "hint": "2 cogumelos cortados, fogão", "needs": ["mush_soup"], "points": 35},
+	{"id": "bruschetta", "name": "Bruschetta", "hint": "pão + tomate cortado", "needs": ["bread", "tomato_chopped"], "points": 25},
+	{"id": "cheese_salad", "name": "Salada com queijo", "hint": "alface, tomate e queijo cortados", "needs": ["lettuce_chopped", "tomato_chopped", "cheese_chopped"], "points": 35},
 	# Tasca portuguesa.
 	{"id": "bitoque", "name": "Bitoque", "hint": "bife e ovo na frigideira + batata cortada frita", "needs": ["steak_cooked", "egg_fried", "fries"], "points": 50},
 	{"id": "bras", "name": "Bacalhau à Brás", "hint": "bacalhau e batata cortados + ovo, tudo na frigideira", "needs": ["bras"], "points": 45},
 	{"id": "caldo", "name": "Caldo Verde", "hint": "couve e batata cortadas, fogão", "needs": ["caldo"], "points": 35},
 	{"id": "prego", "name": "Prego no pão", "hint": "pão + bife na frigideira", "needs": ["bread", "steak_cooked"], "points": 35},
 	{"id": "nata", "name": "Pastel de nata", "hint": "massa + ovo, forno", "needs": ["nata"], "points": 30},
+	{"id": "bife_batatas", "name": "Bife com batatas", "hint": "bife na frigideira + batata cortada frita", "needs": ["steak_cooked", "fries"], "points": 40},
+	{"id": "pao_ovo", "name": "Pão com ovo", "hint": "pão + ovo estrelado", "needs": ["bread", "egg_fried"], "points": 25},
 	# Sushi japonês.
 	{"id": "sashimi", "name": "Sashimi", "hint": "salmão cortado", "needs": ["salmon_chopped"], "points": 15},
 	{"id": "nigiri", "name": "Nigiri", "hint": "arroz cozido + salmão cortado", "needs": ["rice_cooked", "salmon_chopped"], "points": 30},
@@ -23,6 +27,8 @@ const ALL: Array[Dictionary] = [
 	{"id": "tempura", "name": "Tempura", "hint": "camarão na frigideira", "needs": ["tempura"], "points": 25},
 	{"id": "ramen", "name": "Ramen", "hint": "massa ramen + ovo, panela", "needs": ["ramen"], "points": 40},
 	{"id": "uramaki", "name": "Uramaki", "hint": "arroz cozido + alga + tempura", "needs": ["rice_cooked", "nori", "tempura"], "points": 50},
+	{"id": "onigiri", "name": "Onigiri", "hint": "arroz cozido + alga", "needs": ["rice_cooked", "nori"], "points": 25},
+	{"id": "tamago", "name": "Nigiri de tamago", "hint": "arroz cozido + ovo estrelado", "needs": ["rice_cooked", "egg_fried"], "points": 30},
 	# Diner americano.
 	{"id": "burger", "name": "Hambúrguer", "hint": "pão + carne grelhada + alface cortada", "needs": ["bun", "patty_cooked", "lettuce_chopped"], "points": 40},
 	{"id": "cheeseburger", "name": "Cheeseburger", "hint": "pão + carne grelhada + queijo cortado", "needs": ["bun", "patty_cooked", "cheese_chopped"], "points": 40},
@@ -30,6 +36,8 @@ const ALL: Array[Dictionary] = [
 	{"id": "hotdog", "name": "Cachorro-quente", "hint": "pão + salsicha na frigideira", "needs": ["bun", "sausage_cooked"], "points": 35},
 	{"id": "rings", "name": "Anéis de cebola", "hint": "cebola cortada na frigideira", "needs": ["onion_rings"], "points": 25},
 	{"id": "cheese_fries", "name": "Batatas com queijo", "hint": "batatas fritas + queijo cortado", "needs": ["fries", "cheese_chopped"], "points": 30},
+	{"id": "onion_burger", "name": "Hambúrguer de cebola", "hint": "pão + carne grelhada + anéis de cebola", "needs": ["bun", "patty_cooked", "onion_rings"], "points": 45},
+	{"id": "combo", "name": "Cesto misto", "hint": "batatas fritas + anéis de cebola", "needs": ["fries", "onion_rings"], "points": 35},
 	# Trattoria italiana.
 	{"id": "pizza", "name": "Pizza", "hint": "massa + tomate e queijo cortados, forno", "needs": ["pizza"], "points": 45},
 	{"id": "spaghetti", "name": "Esparguete", "hint": "esparguete + tomate cortado, panela", "needs": ["pasta_cooked"], "points": 35},
@@ -37,6 +45,8 @@ const ALL: Array[Dictionary] = [
 	{"id": "risotto", "name": "Risotto de cogumelos", "hint": "arroz + cogumelos cortados, panela", "needs": ["risotto"], "points": 40},
 	{"id": "lasagna", "name": "Lasanha", "hint": "esparguete + carne + queijo cortado, forno", "needs": ["lasagna"], "points": 50},
 	{"id": "funghi", "name": "Pizza de cogumelos", "hint": "massa + queijo e cogumelos cortados, forno", "needs": ["funghi"], "points": 50},
+	{"id": "polpette", "name": "Polpette", "hint": "carne grelhada + tomate cortado", "needs": ["patty_cooked", "tomato_chopped"], "points": 35},
+	{"id": "funghi_salad", "name": "Salada de cogumelos", "hint": "cogumelos e queijo cortados", "needs": ["mushroom_chopped", "cheese_chopped"], "points": 25},
 	# Bebidas: servem-se num copo, tirado no bar (mantém "usar" na torneira).
 	{"id": "water", "name": "Água", "hint": "bar: copo de água", "needs": ["water"], "points": 8, "drink": true},
 	{"id": "juice", "name": "Sumo de laranja", "hint": "bar: sumo de laranja", "needs": ["juice"], "points": 12, "drink": true},
@@ -88,7 +98,7 @@ const CHOPPABLE: Array[String] = ["tomato", "lettuce", "potato", "cod", "salmon"
 const PLATEABLE: Array[String] = [
 	"lettuce_chopped", "tomato_chopped", "salmon_chopped", "cucumber_chopped", "cheese_chopped",
 	"nori", "bun", "steak_cooked", "egg_fried", "fries", "rice_cooked", "patty_cooked",
-	"bread", "tempura", "sausage_cooked", "onion_rings",
+	"bread", "tempura", "sausage_cooked", "onion_rings", "mushroom_chopped",
 ]
 ## Resultados do fogão que ocupam o prato inteiro.
 const SOLO: Array[String] = ["soup", "caldo", "bras", "pizza", "pasta_cooked", "toast", "omelette", "mush_soup",

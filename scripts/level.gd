@@ -20,6 +20,8 @@ var _orders: OrderManager
 var _level: Dictionary
 var _vignette: Texture2D
 var _got_snapshot := false
+## As estrelas pedem menos pontos nos salões pequenos dos primeiros níveis.
+var _seat_scale := 1.0
 var _kitchen: Kitchen
 var _hud: Control
 var _time_left := ROUND_TIME
@@ -80,10 +82,23 @@ func _ready() -> void:
 	add_child(_orders)
 	_kitchen = Kitchen.new(_orders, _level)
 	_kitchen.name = "Kitchen"
-	_kitchen.position = KITCHEN_OFFSET * WORLD_SCALE
-	_kitchen.scale = Vector2.ONE * WORLD_SCALE
+	# Salões maiores (níveis 5 a 10) encolhem para caber no mesmo espaço.
+	var area := Vector2(Levels.LAYOUT[0].length(), Levels.LAYOUT.size()) * Kitchen.TILE * WORLD_SCALE
+	var size := _kitchen.pixel_size()
+	var fit := minf(WORLD_SCALE, minf(area.x / size.x, area.y / size.y))
+	_kitchen.scale = Vector2.ONE * fit
+	_kitchen.position = KITCHEN_OFFSET * WORLD_SCALE + (area - size * fit) / 2.0
 	add_child(_kitchen)
 	_orders.kitchen = _kitchen
+	# Mais mesas, mais grupos: o ritmo e as estrelas acompanham os lugares do salão
+	# (16 lugares = o salão antigo).
+	var seats := 0
+	for t in _kitchen.tables():
+		seats += t.capacity()
+	_orders.max_customers = maxi(OrderManager.MAX_CUSTOMERS, _kitchen.tables().size())
+	if not _endless:
+		_orders.spawn_every *= clampf(sqrt(16.0 / maxf(seats, 1.0)), 0.6, 1.3)
+	_seat_scale = lerpf(1.0, clampf(seats / 16.0, 0.5, 1.0), 0.6)
 	if _endless:
 		_kitchen.door_button = true
 		_kitchen.door_used.connect(_on_door)
@@ -369,7 +384,7 @@ func _stars() -> int:
 	if _endless:
 		return 0
 	# As estrelas pedem mais pontos em rondas mais compridas.
-	var scale := _round_time / ROUND_TIME
+	var scale := _round_time / ROUND_TIME * _seat_scale
 	return _level["stars"].filter(func(s): return _orders.score >= s * scale).size()
 
 
@@ -770,7 +785,7 @@ func _context_actions(chef: Chef, st: Station) -> Array:
 
 
 func _to_screen(kitchen_pos: Vector2) -> Vector2:
-	return _kitchen.position + kitchen_pos * WORLD_SCALE
+	return _kitchen.position + kitchen_pos * _kitchen.scale.x
 
 
 ## Etiqueta centrada num ponto do ecrã.
@@ -1083,9 +1098,9 @@ func _free_cell_near(start: Vector2i) -> Vector2i:
 				if maxi(absi(dx), absi(dy)) != radius:
 					continue
 				var c := start + Vector2i(dx, dy)
-				if c.y < 0 or c.y >= Kitchen.LAYOUT.size() or c.x < 0 or c.x >= Kitchen.LAYOUT[0].length():
+				if c.y < 0 or c.y >= _kitchen.layout.size() or c.x < 0 or c.x >= _kitchen.layout[0].length():
 					continue
-				var ch := Kitchen.LAYOUT[c.y][c.x]
+				var ch := _kitchen.layout[c.y][c.x]
 				if (ch == "." or ch.is_valid_int()) and not taken.has(c):
 					return c
 	return start

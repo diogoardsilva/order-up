@@ -27,6 +27,8 @@ var _controls_box: ControlsMenu
 var _profiles_box: ProfilesMenu
 var _column: VBoxContainer
 var _join_box: HBoxContainer
+var _rooms_box: VBoxContainer
+var _friend_rows: VBoxContainer
 var _ip_edit: LineEdit
 var _update_button: Button
 var _update_label: Label
@@ -110,23 +112,35 @@ func _ready() -> void:
 	column.add_child(_play_box)
 
 	_online_box = _page("Online")
-	_online_box.add_child(UiStyle.button("Criar sala (ser host)", _host, 360))
-	_online_box.add_child(UiStyle.button("Entrar na sala de um amigo", _show_join, 360))
-	_join_box = HBoxContainer.new()
-	_join_box.add_theme_constant_override("separation", 10)
-	_ip_edit = LineEdit.new()
-	_ip_edit.placeholder_text = "Código da sala ou IP"
-	_ip_edit.text = GameState.last_ip
-	_ip_edit.custom_minimum_size = Vector2(220, 56)
-	_ip_edit.text_submitted.connect(func(_t): _join())
-	_join_box.add_child(_ip_edit)
-	_join_box.add_child(UiStyle.button("Ligar", _join, 130))
-	_join_box.hide()
-	_online_box.add_child(_join_box)
-	_online_box.add_child(UiStyle.label("Os amigos online estão em Perfis e conquistas.", 18, UiStyle.MUTED, 4))
+	_online_box.add_child(UiStyle.button("Criar sala", _host, 360))
+	_online_box.add_child(UiStyle.button("Entrar numa sala", _show_join, 360))
 	_online_box.add_child(UiStyle.button("Voltar", _back_page, 360))
 	_online_box.hide()
 	column.add_child(_online_box)
+
+	# Entrar numa sala: com o código ou pela lista de amigos ("Juntar").
+	_rooms_box = _page("Entrar numa sala")
+	_rooms_box.add_child(UiStyle.label("Tenho o código", 22, UiStyle.GOLD, 6))
+	_join_box = HBoxContainer.new()
+	_join_box.add_theme_constant_override("separation", 10)
+	_ip_edit = LineEdit.new()
+	_ip_edit.placeholder_text = "Código da sala"
+	_ip_edit.text = GameState.last_ip
+	_ip_edit.custom_minimum_size = Vector2(220, 54)
+	_ip_edit.text_submitted.connect(func(_t): _join())
+	_join_box.add_child(_ip_edit)
+	_join_box.add_child(UiStyle.button("Entrar", _join, 130))
+	_rooms_box.add_child(_join_box)
+	_rooms_box.add_child(UiStyle.label("Amigos", 22, UiStyle.GOLD, 6))
+	_friend_rows = VBoxContainer.new()
+	_friend_rows.add_theme_constant_override("separation", 6)
+	_rooms_box.add_child(_friend_rows)
+	_rooms_box.add_child(UiStyle.button("Voltar", func():
+		Sfx.play("ui_back")
+		_go_page(_online_box), 360))
+	_rooms_box.hide()
+	column.add_child(_rooms_box)
+	Online.friends_changed.connect(_refresh_friend_rows)
 	for box in [_main_box, _play_box, _online_box]:
 		for b in box.get_children():
 			if b is Button:
@@ -245,7 +259,7 @@ func _go_page(box: VBoxContainer) -> void:
 	_main_box.hide()
 	_play_box.hide()
 	_online_box.hide()
-	_join_box.hide()
+	_rooms_box.hide()
 	box.show()
 	_page_box = box
 	# Os botões aparecem um a um, como folhas novas do bloco.
@@ -405,7 +419,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("ui_cancel") and _options_box.visible:
 		Sfx.play("ui_back")
 		_hide_options()
-	elif event.is_action_pressed("ui_cancel") and (_play_box.visible or _online_box.visible) and not _ip_edit.has_focus():
+	elif event.is_action_pressed("ui_cancel") and _rooms_box.visible and not _ip_edit.has_focus():
+		Sfx.play("ui_back")
+		_go_page(_online_box)
+	elif event.is_action_pressed("ui_cancel") and (_play_box.visible or _online_box.visible):
 		_back_page()
 
 
@@ -540,8 +557,47 @@ func _host() -> void:
 
 
 func _show_join() -> void:
-	_join_box.show()
-	_ip_edit.grab_focus()
+	_go_page(_rooms_box)
+	_refresh_friend_rows()
+	if Online.logged_in():
+		Online.refresh_friends()
+
+
+## Amigos com sala aberta primeiro, com "Juntar"; depois os outros online.
+func _refresh_friend_rows() -> void:
+	if _friend_rows == null:
+		return
+	for c in _friend_rows.get_children():
+		c.queue_free()
+	if not Online.logged_in():
+		var l := UiStyle.label("Entra na tua conta (em Perfis e conquistas) para veres aqui os teus amigos.", 18, UiStyle.MUTED, 4)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.custom_minimum_size.x = 360
+		_friend_rows.add_child(l)
+		return
+	var list: Array = Online.friends.filter(func(f): return f.get("online", false))
+	list.sort_custom(func(a, b): return str(a.get("room_code", "")) != "" and str(b.get("room_code", "")) == "")
+	if list.is_empty():
+		_friend_rows.add_child(UiStyle.label("Nenhum amigo online agora.", 18, UiStyle.MUTED, 4))
+		return
+	for f in list.slice(0, 3):
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 8)
+		var name := UiStyle.label("● " + str(f.get("name", "?")), 22, UiStyle.TEXT, 4)
+		name.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		name.custom_minimum_size.x = 210
+		name.clip_text = true
+		row.add_child(name)
+		var room = f.get("room_code")
+		if room is String and room != "":
+			var b := UiStyle.button("Juntar", func():
+				_status.text = "A entrar na sala de %s..." % f.get("name", "?")
+				Online.join_room(room), 142)
+			b.custom_minimum_size.y = 44
+			row.add_child(b)
+		else:
+			row.add_child(UiStyle.label("sem sala", 18, UiStyle.MUTED, 4))
+		_friend_rows.add_child(row)
 
 
 func _join() -> void:

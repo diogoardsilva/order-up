@@ -26,6 +26,60 @@ const LAYOUT: Array[String] = [
 	"C..........H.......E",
 	"CBBBSSSCCCCCCCCCCCCC",
 ]
+## A cozinha (colunas 0 a 11) é igual em todos os níveis; o salão cresce de
+## nível para nível: mais mesas e, a partir do 5.º, mais largo (24 colunas).
+const KITCHEN_COLS := 12
+## Coluna da caixa registadora no salão (a fila vai para a direita dela).
+const REGISTER_CELL := Vector2i(16, 6)
+## Mesas de cada nível: [largura da planta, [[x, y, células], ...]]. Uma mesa
+## de N células tem 2N lugares (1 = mesa de 2, 2 = de 4, 3 = de 6, ...).
+const TABLE_PLANS: Array = [
+	[20, [[13, 2, 1], [13, 4, 1], [16, 2, 2]]],
+	[20, [[13, 2, 1], [13, 4, 1], [13, 8, 1], [16, 2, 2]]],
+	[20, [[13, 2, 1], [13, 4, 1], [13, 8, 1], [16, 2, 2], [16, 9, 2]]],
+	[20, [[13, 2, 1], [13, 4, 1], [13, 8, 1], [13, 10, 1], [16, 2, 2], [16, 9, 2]]],
+	[24, [[13, 2, 1], [13, 4, 1], [13, 8, 1], [13, 10, 1], [16, 2, 2], [16, 9, 2], [19, 2, 1], [19, 4, 1]]],
+	[24, [[13, 2, 1], [13, 4, 1], [13, 8, 1], [13, 10, 1], [16, 2, 2], [16, 9, 2], [19, 2, 1], [19, 4, 1], [19, 8, 1], [19, 10, 1]]],
+	[24, [[13, 2, 1], [13, 4, 1], [13, 8, 1], [13, 10, 1], [16, 2, 2], [16, 9, 2], [19, 2, 3], [19, 8, 1], [19, 10, 1]]],
+	[24, [[13, 2, 1], [13, 4, 1], [13, 8, 1], [13, 10, 1], [16, 2, 2], [16, 9, 2], [19, 2, 3], [19, 8, 3]]],
+	[24, [[13, 2, 1], [13, 4, 1], [13, 8, 1], [13, 10, 1], [16, 2, 2], [16, 9, 2], [19, 1, 4], [19, 8, 3]]],
+	[24, [[13, 2, 1], [13, 4, 1], [13, 8, 1], [13, 10, 1], [16, 2, 2], [16, 9, 2], [19, 1, 5], [19, 7, 4]]],
+]
+
+
+## A planta de um nível (stage < 0, a Casa Aberta, usa a do último).
+static func layout_for(stage: int) -> Array[String]:
+	var plan: Array = TABLE_PLANS[stage if stage >= 0 and stage < TABLE_PLANS.size() else TABLE_PLANS.size() - 1]
+	var width: int = plan[0]
+	var rows: Array = []
+	for y in LAYOUT.size():
+		var row: String = LAYOUT[y].substr(0, KITCHEN_COLS)
+		var dining := ""
+		for x in range(KITCHEN_COLS, width):
+			if y == 0 or y == LAYOUT.size() - 1:
+				dining += "C"
+			elif x == width - 1:
+				dining += "D" if y == 4 or y == 8 else ("E" if y == LAYOUT.size() - 2 else "C")
+			else:
+				dining += "."
+		rows.append((row + dining).split(""))
+	rows[REGISTER_CELL.y][REGISTER_CELL.x] = "R"
+	for t in plan[1]:
+		var x: int = t[0]
+		var y: int = t[1]
+		var cells: int = t[2]
+		if cells == 1:
+			rows[y][x] = "M"
+		else:
+			rows[y][x] = "N"
+			for k in range(1, cells):
+				rows[y + k][x] = "n"
+	var result: Array[String] = []
+	for r in rows:
+		result.append("".join(r))
+	return result
+
+
 ## Letras das caixas de ingredientes na planta, pela ordem de "crates".
 const CRATE_LETTERS := "abcdefg"
 
@@ -37,57 +91,82 @@ const CRATE_LETTERS := "abcdefg"
 const ALL: Array[Dictionary] = [
 	{"id": "classic", "drinks": ["water", "juice"], "stove": "pot", "name": "O Primeiro Dia", "place": "Restaurante do bairro", "theme": "classic",
 		"crates": ["tomato", "lettuce", "bread", "cheese", "egg", "mushroom"],
-		"dishes": ["salad", "soup", "toast", "omelette", "mush_soup"], "stars": [60, 150, 260],
+		"dishes": ["salad", "soup", "toast", "omelette", "mush_soup", "bruschetta", "cheese_salad"], "stars": [60, 150, 260],
 		"stages": [
 			{"name": "Portas abertas", "desc": "Saladas e sopa, com calma.", "dishes": ["salad", "soup"], "bar": false, "spawn": 1.25, "patience": 1.3, "stars": [50, 130, 220]},
 			{"name": "Tostas ao balcão", "desc": "Chegam as tostas mistas.", "dishes": ["salad", "soup", "toast"], "spawn": 1.1, "stars": [60, 150, 250]},
 			{"name": "Pequeno-almoço", "desc": "Omeletes e tostas, sempre a sair.", "dishes": ["toast", "omelette", "salad"], "spawn": 1.0, "stars": [70, 170, 280]},
 			{"name": "Dia de chuva", "desc": "Toda a gente quer sopa quente.", "dishes": ["soup", "mush_soup", "toast"], "spawn": 0.9, "patience": 0.9, "stars": [80, 190, 310]},
 			{"name": "Casa cheia", "desc": "O menu todo, e o bairro todo à porta.", "dishes": ["salad", "soup", "toast", "omelette", "mush_soup"], "spawn": 0.75, "big": true, "points": 1.2, "stars": [100, 230, 380]},
+			{"name": "Esplanada", "desc": "Abre a esplanada: bruschettas ao sol.", "dishes": ["salad", "toast", "omelette", "bruschetta"], "spawn": 0.85, "patience": 1.0, "big": true, "points": 1.25, "stars": [140, 320, 520]},
+			{"name": "Feira do bairro", "desc": "Mais mesas e o menu todo.", "dishes": ["salad", "soup", "toast", "omelette", "mush_soup", "bruschetta"], "spawn": 0.8, "patience": 1.0, "big": true, "points": 1.3, "stars": [170, 380, 620]},
+			{"name": "Jantar de grupo", "desc": "Chega a mesa grande, para 6.", "dishes": ["salad", "soup", "toast", "omelette", "mush_soup", "bruschetta", "cheese_salad"], "spawn": 0.78, "patience": 0.95, "big": true, "points": 1.35, "stars": [190, 430, 700]},
+			{"name": "Aniversário", "desc": "Mesas de 6 e 8 e muita fome.", "dishes": ["salad", "soup", "toast", "omelette", "mush_soup", "bruschetta", "cheese_salad"], "spawn": 0.72, "patience": 0.95, "big": true, "points": 1.45, "stars": [210, 480, 780]},
+			{"name": "Festa da rua", "desc": "O bairro inteiro: mesas de 8 e de 10.", "dishes": ["salad", "soup", "toast", "omelette", "mush_soup", "bruschetta", "cheese_salad"], "spawn": 0.66, "patience": 0.9, "big": true, "points": 1.55, "stars": [240, 540, 880]},
 		]},
 	{"id": "tasca", "drinks": ["wine", "coffee"], "stove": "pan", "name": "Tasca do Zé", "place": "Portugal", "theme": "portugal",
 		"crates": ["steak", "egg", "potato", "cod", "kale", "bread", "dough"],
-		"dishes": ["bitoque", "bras", "caldo", "prego", "nata"], "stars": [80, 200, 340],
+		"dishes": ["bitoque", "bras", "caldo", "prego", "nata", "bife_batatas", "pao_ovo"], "stars": [80, 200, 340],
 		"stages": [
 			{"name": "Prego e caldo", "desc": "O petisco da casa.", "dishes": ["prego", "caldo"], "bar": false, "spawn": 1.25, "patience": 1.3, "stars": [60, 150, 250]},
 			{"name": "Almoço de domingo", "desc": "Bitoques para a família toda.", "dishes": ["bitoque", "caldo", "prego"], "spawn": 1.1, "big": true, "stars": [80, 200, 330]},
 			{"name": "Hora do café", "desc": "Pastéis de nata acabados de sair.", "dishes": ["nata", "prego", "caldo"], "spawn": 1.0, "stars": [80, 190, 320]},
 			{"name": "Bacalhau para todos", "desc": "Brás, bitoque e pressa.", "dishes": ["bras", "bitoque", "nata"], "spawn": 0.9, "patience": 0.9, "stars": [90, 220, 360]},
 			{"name": "Santos Populares", "desc": "Noite de festa: tudo o que a tasca tem.", "dishes": ["bitoque", "bras", "caldo", "prego", "nata"], "spawn": 0.72, "big": true, "points": 1.2, "stars": [110, 260, 420]},
+			{"name": "Petiscos", "desc": "Pão com ovo para acompanhar.", "dishes": ["prego", "caldo", "bitoque", "pao_ovo"], "spawn": 0.85, "patience": 1.0, "big": true, "points": 1.25, "stars": [140, 320, 520]},
+			{"name": "Dia de feira", "desc": "Bife com batatas para a feira toda.", "dishes": ["bitoque", "bras", "caldo", "prego", "nata", "bife_batatas"], "spawn": 0.8, "patience": 1.0, "big": true, "points": 1.3, "stars": [170, 380, 620]},
+			{"name": "Batizado", "desc": "A primeira mesa de 6.", "dishes": ["bitoque", "bras", "caldo", "prego", "nata", "bife_batatas", "pao_ovo"], "spawn": 0.78, "patience": 0.95, "big": true, "points": 1.35, "stars": [190, 430, 700]},
+			{"name": "Festa da aldeia", "desc": "Mesas de 6 e 8, sempre a encher.", "dishes": ["bitoque", "bras", "caldo", "prego", "nata", "bife_batatas", "pao_ovo"], "spawn": 0.72, "patience": 0.95, "big": true, "points": 1.45, "stars": [210, 480, 780]},
+			{"name": "Casamento minhoto", "desc": "Mesas de 8 e de 10: a família toda.", "dishes": ["bitoque", "bras", "caldo", "prego", "nata", "bife_batatas", "pao_ovo"], "spawn": 0.66, "patience": 0.9, "big": true, "points": 1.55, "stars": [240, 540, 880]},
 		]},
 	{"id": "sushi", "drinks": ["tea", "water"], "stove": "pot", "name": "Sakura Sushi", "place": "Japão", "theme": "japan",
 		"crates": ["rice", "salmon", "nori", "cucumber", "shrimp", "noodles", "egg"],
-		"dishes": ["sashimi", "nigiri", "maki", "tempura", "ramen", "uramaki"], "stars": [70, 180, 300],
+		"dishes": ["sashimi", "nigiri", "maki", "tempura", "ramen", "uramaki", "onigiri", "tamago"], "stars": [70, 180, 300],
 		"stages": [
 			{"name": "Balcão de sushi", "desc": "Sashimi e nigiri.", "dishes": ["sashimi", "nigiri"], "bar": false, "spawn": 1.25, "patience": 1.3, "stars": [50, 130, 220]},
 			{"name": "Rolos", "desc": "Aprendam a enrolar maki.", "dishes": ["sashimi", "nigiri", "maki"], "spawn": 1.1, "stars": [70, 180, 300]},
 			{"name": "Fritos", "desc": "Tempura estaladiço e uramaki.", "dishes": ["tempura", "uramaki", "nigiri"], "spawn": 1.0, "stars": [80, 190, 320]},
 			{"name": "Noite de ramen", "desc": "Taças de ramen a fumegar.", "dishes": ["ramen", "maki", "tempura"], "spawn": 0.9, "patience": 0.9, "stars": [90, 210, 350]},
 			{"name": "Hanami", "desc": "Festa das cerejeiras: casa cheia.", "dishes": ["sashimi", "nigiri", "maki", "tempura", "ramen", "uramaki"], "spawn": 0.72, "big": true, "points": 1.2, "stars": [110, 260, 420]},
+			{"name": "Bento", "desc": "Onigiri para levar.", "dishes": ["sashimi", "nigiri", "maki", "onigiri"], "spawn": 0.85, "patience": 1.0, "big": true, "points": 1.25, "stars": [140, 320, 520]},
+			{"name": "Festival", "desc": "Mais mesas e o menu todo.", "dishes": ["sashimi", "nigiri", "maki", "tempura", "ramen", "uramaki", "onigiri"], "spawn": 0.8, "patience": 1.0, "big": true, "points": 1.3, "stars": [170, 380, 620]},
+			{"name": "Tamago", "desc": "Nigiri de omelete e uma mesa de 6.", "dishes": ["sashimi", "nigiri", "maki", "tempura", "ramen", "uramaki", "onigiri", "tamago"], "spawn": 0.78, "patience": 0.95, "big": true, "points": 1.35, "stars": [190, 430, 700]},
+			{"name": "Ano novo", "desc": "Mesas de 6 e 8 a celebrar.", "dishes": ["sashimi", "nigiri", "maki", "tempura", "ramen", "uramaki", "onigiri", "tamago"], "spawn": 0.72, "patience": 0.95, "big": true, "points": 1.45, "stars": [210, 480, 780]},
+			{"name": "Matsuri", "desc": "Mesas de 8 e de 10: a festa maior.", "dishes": ["sashimi", "nigiri", "maki", "tempura", "ramen", "uramaki", "onigiri", "tamago"], "spawn": 0.66, "patience": 0.9, "big": true, "points": 1.55, "stars": [240, 540, 880]},
 		]},
 	{"id": "diner", "drinks": ["soda", "shake"], "stove": "pan", "name": "Rocket Diner", "place": "Estados Unidos", "theme": "diner",
 		"crates": ["bun", "patty", "lettuce", "cheese", "potato", "sausage", "onion"],
-		"dishes": ["burger", "cheeseburger", "fries", "hotdog", "rings", "cheese_fries"], "stars": [80, 200, 340],
+		"dishes": ["burger", "cheeseburger", "fries", "hotdog", "rings", "cheese_fries", "onion_burger", "combo"], "stars": [80, 200, 340],
 		"stages": [
 			{"name": "Abertura", "desc": "Hambúrgueres e batatas.", "dishes": ["burger", "fries"], "bar": false, "spawn": 1.25, "patience": 1.3, "stars": [60, 150, 250]},
 			{"name": "Cachorros", "desc": "Chegam os cachorros-quentes.", "dishes": ["hotdog", "fries", "burger"], "spawn": 1.1, "stars": [80, 190, 320]},
 			{"name": "Tudo com queijo", "desc": "Cheeseburgers e batatas com queijo.", "dishes": ["cheeseburger", "cheese_fries", "rings"], "spawn": 1.0, "stars": [80, 200, 330]},
 			{"name": "Drive-in", "desc": "Rápido, rápido, que o filme começa.", "dishes": ["burger", "hotdog", "rings", "fries"], "spawn": 0.85, "patience": 0.85, "stars": [90, 220, 360]},
 			{"name": "Rock and roll", "desc": "Noite de jukebox: o menu todo.", "dishes": ["burger", "cheeseburger", "fries", "hotdog", "rings", "cheese_fries"], "spawn": 0.72, "big": true, "points": 1.2, "stars": [110, 260, 420]},
+			{"name": "Cesto misto", "desc": "Batatas e anéis no mesmo cesto.", "dishes": ["burger", "fries", "rings", "combo"], "spawn": 0.85, "patience": 1.0, "big": true, "points": 1.25, "stars": [140, 320, 520]},
+			{"name": "Sábado à noite", "desc": "Hambúrguer de cebola e o menu todo.", "dishes": ["burger", "cheeseburger", "fries", "hotdog", "rings", "cheese_fries", "onion_burger"], "spawn": 0.8, "patience": 1.0, "big": true, "points": 1.3, "stars": [170, 380, 620]},
+			{"name": "Equipa de futebol", "desc": "Chega a mesa de 6.", "dishes": ["burger", "cheeseburger", "fries", "hotdog", "rings", "cheese_fries", "onion_burger", "combo"], "spawn": 0.78, "patience": 0.95, "big": true, "points": 1.35, "stars": [190, 430, 700]},
+			{"name": "Baile de finalistas", "desc": "Mesas de 6 e 8.", "dishes": ["burger", "cheeseburger", "fries", "hotdog", "rings", "cheese_fries", "onion_burger", "combo"], "spawn": 0.72, "patience": 0.95, "big": true, "points": 1.45, "stars": [210, 480, 780]},
+			{"name": "Quatro de Julho", "desc": "Mesas de 8 e de 10: fogo de artifício.", "dishes": ["burger", "cheeseburger", "fries", "hotdog", "rings", "cheese_fries", "onion_burger", "combo"], "spawn": 0.66, "patience": 0.9, "big": true, "points": 1.55, "stars": [240, 540, 880]},
 		]},
 	{"id": "trattoria", "drinks": ["wine", "coffee"], "stove": "oven", "name": "Trattoria Nonna", "place": "Itália", "theme": "italy",
 		"crates": ["dough", "tomato", "cheese", "pasta", "patty", "rice", "mushroom"],
-		"dishes": ["pizza", "spaghetti", "caprese", "risotto", "lasagna", "funghi"], "stars": [80, 200, 340],
+		"dishes": ["pizza", "spaghetti", "caprese", "risotto", "lasagna", "funghi", "polpette", "funghi_salad"], "stars": [80, 200, 340],
 		"stages": [
 			{"name": "Antipasti", "desc": "Caprese e esparguete.", "dishes": ["caprese", "spaghetti"], "bar": false, "spawn": 1.25, "patience": 1.3, "stars": [50, 140, 230]},
 			{"name": "Forno a lenha", "desc": "As primeiras pizzas.", "dishes": ["pizza", "caprese", "spaghetti"], "spawn": 1.1, "stars": [80, 190, 320]},
 			{"name": "Receitas da Nonna", "desc": "Lasanha e risotto, devagarinho.", "dishes": ["lasagna", "risotto", "caprese"], "spawn": 1.0, "patience": 1.1, "stars": [80, 200, 330]},
 			{"name": "Noite das pizzas", "desc": "Margherita e funghi sem parar.", "dishes": ["pizza", "funghi", "spaghetti"], "spawn": 0.85, "patience": 0.9, "stars": [90, 220, 360]},
 			{"name": "Casamento", "desc": "A família toda à mesa: o menu todo.", "dishes": ["pizza", "spaghetti", "caprese", "risotto", "lasagna", "funghi"], "spawn": 0.72, "big": true, "points": 1.2, "stars": [110, 260, 420]},
+			{"name": "Polpette", "desc": "As almôndegas da Nonna.", "dishes": ["pizza", "spaghetti", "caprese", "polpette"], "spawn": 0.85, "patience": 1.0, "big": true, "points": 1.25, "stars": [140, 320, 520]},
+			{"name": "Domingo em família", "desc": "Mais mesas e o menu todo.", "dishes": ["pizza", "spaghetti", "caprese", "risotto", "lasagna", "funghi", "polpette"], "spawn": 0.8, "patience": 1.0, "big": true, "points": 1.3, "stars": [170, 380, 620]},
+			{"name": "Insalata", "desc": "Salada de cogumelos e uma mesa de 6.", "dishes": ["pizza", "spaghetti", "caprese", "risotto", "lasagna", "funghi", "polpette", "funghi_salad"], "spawn": 0.78, "patience": 0.95, "big": true, "points": 1.35, "stars": [190, 430, 700]},
+			{"name": "Festa da vindima", "desc": "Mesas de 6 e 8.", "dishes": ["pizza", "spaghetti", "caprese", "risotto", "lasagna", "funghi", "polpette", "funghi_salad"], "spawn": 0.72, "patience": 0.95, "big": true, "points": 1.45, "stars": [210, 480, 780]},
+			{"name": "Ferragosto", "desc": "Mesas de 8 e de 10: a Itália toda.", "dishes": ["pizza", "spaghetti", "caprese", "risotto", "lasagna", "funghi", "polpette", "funghi_salad"], "spawn": 0.66, "patience": 0.9, "big": true, "points": 1.55, "stars": [240, 540, 880]},
 		]},
 ]
 ## Níveis por restaurante.
-const STAGES := 5
+const STAGES := 10
 
 ## Nome de cada ingrediente (para as caixas e o tutorial).
 const INGREDIENT_NAMES := {
@@ -187,6 +266,7 @@ static func build(index: int, stage: int) -> Dictionary:
 		level["id"] = stage_id(index, stage)
 		level["stage_name"] = st["name"]
 	level["crates"] = crates_for(rest, level["dishes"])
+	level["layout"] = layout_for(stage)
 	return level
 
 

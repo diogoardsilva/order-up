@@ -54,7 +54,7 @@ func _run() -> void:
 	s.queue_free()
 
 	GameState.level = 1
-	GameState.stage = 2
+	GameState.stage = 6
 	GameState.endless = false
 	s = _open("res://scenes/level_select.tscn")
 	await _wait(1.5)
@@ -62,11 +62,11 @@ func _run() -> void:
 	s.queue_free()
 
 	GameState.level = 2
-	GameState.stage = 4
+	GameState.stage = 9
 	GameState.mode = GameState.Mode.PLAY
 	var level: Node = _open("res://scenes/level.tscn")
 	await _wait(9.0)
-	await _shot("04-sushi-hanami")
+	await _shot("04-sushi-matsuri")
 	# Doses duplas e molhos de ingredientes.
 	var kitchen: Kitchen = level._kitchen
 	var stoves := kitchen.stations.values().filter(func(st): return st is StoveStation)
@@ -120,5 +120,21 @@ func _run() -> void:
 	menu._show_changelog()
 	await _wait(0.6)
 	await _shot("12-novidades")
+	for c in menu.get_children():
+		if c.has_signal("closed") and c.get_script() == load("res://scripts/changelog_menu.gd"):
+			c.closed.emit()
+	await _wait(0.3)
+	menu._go_page(menu._online_box)
+	menu._show_join()
+	await _wait(0.8)
+	await _shot("13-entrar-sala")
+	# Um salão pequeno (nível 1) para comparar.
+	menu.queue_free()
+	GameState.level = 0
+	GameState.stage = 0
+	var small: Node = _open("res://scenes/level.tscn")
+	await _wait(9.0)
+	await _shot("14-nivel-1")
+	small.queue_free()
 	print("SHOTS DONE")
 	get_tree().quit()
