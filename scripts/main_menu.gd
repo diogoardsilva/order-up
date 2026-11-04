@@ -27,6 +27,11 @@ var _update_button: Button
 var _update_label: Label
 var _status: Label
 var _first_button: Button
+var _continue_button: Button
+var _play_box: VBoxContainer
+var _online_box: VBoxContainer
+## Página aberta agora (a principal, Jogar ou Online).
+var _page_box: VBoxContainer
 var _fullscreen_button: Button
 
 
@@ -59,14 +64,44 @@ func _ready() -> void:
 	column.add_theme_constant_override("separation", 10)
 	add_child(column)
 
-	_main_box = VBoxContainer.new()
-	_main_box.add_theme_constant_override("separation", 8)
+	# Páginas do menu: a principal e as de Jogar e Online. A bola (ou Shift)
+	# volta sempre à página anterior.
+	_main_box = _page()
 	column.add_child(_main_box)
-	_first_button = UiStyle.button("Jogar", _start_local, 360)
+	if GameState.tutorial_done or int(Profiles.profiles[Profiles.active]["stats"].get("tutorial", 0)) > 0:
+		var rest: Dictionary = Levels.get_level(GameState.level)
+		var stage_name: String = rest["stages"][clampi(GameState.stage, 0, Levels.STAGES - 1)]["name"]
+		_continue_button = UiStyle.button("Continuar: %s %d" % [rest["name"], GameState.stage + 1], _start_local, 360)
+		_continue_button.tooltip_text = stage_name
+		# Texto à esquerda e um pouco menor, para não ficar por baixo do botão do comando.
+		_continue_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_continue_button.add_theme_font_size_override("font_size", 22)
+		_continue_button.add_theme_constant_override("h_separation", 0)
+		_continue_button.text = "  " + _continue_button.text
+		_main_box.add_child(_continue_button)
+	_first_button = UiStyle.button("Jogar", func(): _go_page(_play_box), 360)
 	_main_box.add_child(_first_button)
-	_main_box.add_child(UiStyle.button("Tutorial", _start_tutorial, 360))
-	_main_box.add_child(UiStyle.button("Ser host (criar sala online)", _host, 360))
-	_main_box.add_child(UiStyle.button("Entrar na sala de um amigo", _show_join, 360))
+	_main_box.add_child(UiStyle.button("Online", func(): _go_page(_online_box), 360))
+	_main_box.add_child(UiStyle.button("Perfis e conquistas", _show_profiles, 360))
+	_main_box.add_child(UiStyle.button("Opções", _show_options, 360))
+	# Aparece quando uma atualização já está descarregada.
+	_update_button = UiStyle.button("Reiniciar e atualizar", func(): Updater.restart_now(), 360)
+	_update_button.hide()
+	_main_box.add_child(_update_button)
+	_main_box.add_child(UiStyle.button("Sair", func(): get_tree().quit(), 360))
+	if _continue_button:
+		_first_button = _continue_button
+
+	_play_box = _page("Jogar")
+	_play_box.add_child(UiStyle.button("No mesmo PC (1 a 4)", _start_local, 360))
+	_play_box.add_child(UiStyle.button("Tutorial", _start_tutorial, 360))
+	_play_box.add_child(UiStyle.button("Voltar", _back_page, 360))
+	_play_box.hide()
+	column.add_child(_play_box)
+
+	_online_box = _page("Online")
+	_online_box.add_child(UiStyle.button("Criar sala (ser host)", _host, 360))
+	_online_box.add_child(UiStyle.button("Entrar na sala de um amigo", _show_join, 360))
 	_join_box = HBoxContainer.new()
 	_join_box.add_theme_constant_override("separation", 10)
 	_ip_edit = LineEdit.new()
@@ -77,17 +112,15 @@ func _ready() -> void:
 	_join_box.add_child(_ip_edit)
 	_join_box.add_child(UiStyle.button("Ligar", _join, 130))
 	_join_box.hide()
-	_main_box.add_child(_join_box)
-	_main_box.add_child(UiStyle.button("Perfis e conquistas", _show_profiles, 360))
-	_main_box.add_child(UiStyle.button("Opções", _show_options, 360))
-	# Aparece quando uma atualização já está descarregada.
-	_update_button = UiStyle.button("Reiniciar e atualizar", func(): Updater.restart_now(), 360)
-	_update_button.hide()
-	_main_box.add_child(_update_button)
-	_main_box.add_child(UiStyle.button("Sair", func(): get_tree().quit(), 360))
-	for b in _main_box.get_children():
-		if b is Button:
-			b.custom_minimum_size.y = 54
+	_online_box.add_child(_join_box)
+	_online_box.add_child(UiStyle.label("Os amigos online estão em Perfis e conquistas.", 18, UiStyle.MUTED, 4))
+	_online_box.add_child(UiStyle.button("Voltar", _back_page, 360))
+	_online_box.hide()
+	column.add_child(_online_box)
+	for box in [_main_box, _play_box, _online_box]:
+		for b in box.get_children():
+			if b is Button:
+				b.custom_minimum_size.y = 54
 
 	_options_box = _build_options()
 	_options_box.hide()
@@ -144,6 +177,63 @@ func _ready() -> void:
 	_first_button.grab_focus()
 	_intro()
 	Sfx.music_on()
+
+
+## Uma página do menu, com uma fita com o título (a principal não tem).
+func _page(title := "") -> VBoxContainer:
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	if title != "":
+		var ribbon := Control.new()
+		ribbon.custom_minimum_size = Vector2(360, 52)
+		ribbon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		ribbon.draw.connect(func(): _draw_ribbon(ribbon, title))
+		box.add_child(ribbon)
+	return box
+
+
+## Fita vermelha com o título da página, como a do logótipo.
+func _draw_ribbon(ci: Control, text: String) -> void:
+	var w := ci.size.x
+	var band := Rect2(10, 6, w - 20, 40)
+	var dark := Color("8e2430")
+	for side in [-1, 1]:
+		var ex := band.position.x - 8 if side < 0 else band.end.x - 14
+		ci.draw_rect(Rect2(ex, 14, 22, 32), dark)
+		ci.draw_rect(Rect2(ex, 14, 22, 32), UiStyle.INK, false, 3.0)
+	ci.draw_rect(band, Color("d23a32"))
+	ci.draw_rect(Rect2(band.position, Vector2(band.size.x, 4)), Color("f2604a"))
+	ci.draw_rect(Rect2(band.position + Vector2(0, band.size.y - 4), Vector2(band.size.x, 4)), dark)
+	ci.draw_rect(band, UiStyle.INK, false, 3.0)
+	UiStyle.shadow_text(ci, band.position + Vector2(0, 31), text, 32, UiStyle.PAPER, HORIZONTAL_ALIGNMENT_CENTER, band.size.x)
+
+
+func _go_page(box: VBoxContainer) -> void:
+	_main_box.hide()
+	_play_box.hide()
+	_online_box.hide()
+	_join_box.hide()
+	box.show()
+	_page_box = box
+	# Os botões aparecem um a um, como folhas novas do bloco.
+	var i := 0
+	for b in box.get_children():
+		var c := b as Control
+		c.modulate.a = 0.0
+		var t := create_tween()
+		t.tween_interval(i * 0.04)
+		t.tween_property(c, "modulate:a", 1.0, 0.14)
+		i += 1
+	for b in box.get_children():
+		if b is Button and b.visible:
+			b.grab_focus()
+			break
+
+
+func _back_page() -> void:
+	Sfx.play("ui_back")
+	_go_page(_main_box)
+	_first_button.grab_focus()
 
 
 func _build_background() -> void:
@@ -267,6 +357,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("ui_cancel") and _options_box.visible:
 		Sfx.play("ui_back")
 		_hide_options()
+	elif event.is_action_pressed("ui_cancel") and (_play_box.visible or _online_box.visible) and not _ip_edit.has_focus():
+		_back_page()
 
 
 func _intro() -> void:

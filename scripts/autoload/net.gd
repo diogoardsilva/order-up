@@ -194,6 +194,8 @@ func start_level(level: int, helpers: Array, endless: bool, settings: Array) -> 
 	GameState.difficulty = settings[0]
 	GameState.custom = settings[1].duplicate()
 	GameState.level = level
+	# O nível dentro do restaurante vem no fim das definições (0.6).
+	GameState.stage = int(settings[2]) if settings.size() > 2 else 0
 	GameState.helpers = helpers.duplicate()
 	Transition.go("res://scenes/level.tscn")
 

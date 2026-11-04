@@ -54,6 +54,8 @@ var _last_score := 0
 var _finish_time := 0.0
 var _last_second := -1
 var _stars_played := 0
+var _pause_button: Button
+var _results_buttons: HBoxContainer
 
 
 func _ready() -> void:
@@ -61,15 +63,19 @@ func _ready() -> void:
 	_orders.scripted = GameState.mode == GameState.Mode.TUTORIAL and not Net.online
 	if _orders.scripted:
 		GameState.level = 0
-	_level = Levels.get_level(GameState.level)
+		GameState.stage = 0
+	_endless = GameState.endless and not _orders.scripted
+	# O restaurante com as regras do nível escolhido (a Casa Aberta tem o menu todo).
+	_level = Levels.build(GameState.level, -1 if _endless else GameState.stage)
 	_orders.menu = Levels.dishes(_level)
 	_orders.drinks = Levels.drinks(_level)
 	var diff := GameState.difficulty_values()
-	_orders.patience_scale = diff["patience"]
-	_orders.spawn_every = OrderManager.SPAWN_EVERY * diff["spawn"]
+	_orders.patience_scale = diff["patience"] * float(_level["patience"])
+	_orders.spawn_every = OrderManager.SPAWN_EVERY * diff["spawn"] * float(_level["spawn"])
+	_orders.points_scale = float(_level["points"])
+	_orders.big_groups = bool(_level["big"])
 	_round_time = diff["minutes"] * 60.0
 	_time_left = _round_time
-	_endless = GameState.endless and not _orders.scripted
 	_orders.closed = _endless
 	add_child(_orders)
 	_kitchen = Kitchen.new(_orders, _level)
@@ -105,6 +111,8 @@ func _ready() -> void:
 		chef.is_local = not p["source"] is RemoteSource
 		chef.pause_requested.connect(_on_pause)
 		chef.confirm_pressed.connect(_on_confirm)
+		chef.back_pressed.connect(_on_results_back)
+		chef.retry_pressed.connect(_on_retry)
 		chef.interact_requested.connect(_on_interact.bind(chef))
 		chef.throw_requested.connect(_on_throw.bind(chef))
 		_kitchen.add_child(chef)
@@ -123,14 +131,34 @@ func _ready() -> void:
 	_hud.draw.connect(_draw_hud)
 	layer.add_child(_hud)
 
+	# Botão de pausa para quem joga com o rato.
+	_pause_button = UiStyle.button("Pausa", _on_pause, 96, false)
+	_pause_button.theme = UiStyle.theme()
+	_pause_button.add_theme_font_size_override("font_size", 20)
+	_pause_button.position = Vector2(8, 680)
+	_pause_button.size = Vector2(96, 34)
+	_pause_button.custom_minimum_size = Vector2(96, 34)
+	layer.add_child(_pause_button)
+	_results_buttons = HBoxContainer.new()
+	_results_buttons.theme = UiStyle.theme()
+	_results_buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+	_results_buttons.add_theme_constant_override("separation", 14)
+	_results_buttons.position = Vector2(0, 596)
+	_results_buttons.size = Vector2(1280, 56)
+	_results_buttons.hide()
+	layer.add_child(_results_buttons)
+
 	_start_profiles()
 	var pause_layer := CanvasLayer.new()
 	pause_layer.layer = 10
 	add_child(pause_layer)
 	_pause_menu = PauseMenu.new()
+	_pause_menu.level = _level if not _orders.scripted else {}
 	pause_layer.add_child(_pause_menu)
 	_pause_menu.resumed.connect(_on_resume)
 	_pause_menu.to_lobby.connect(_back_to_lobby)
+	_pause_menu.to_select.connect(_to_level_select)
+	_pause_menu.restart.connect(func(): _start_stage(GameState.level, int(_level["stage"])))
 	_pause_menu.to_menu.connect(func():
 		Net.leave()
 		Transition.go("res://scenes/main_menu.tscn"))
@@ -330,6 +358,7 @@ func _finish() -> void:
 	_orders.active = false
 	Sfx.play("round_end")
 	Sfx.play("swoosh", -2.0, 0.0)
+	_show_results_buttons()
 	for chef in _kitchen.chefs:
 		chef.frozen = true
 		chef.celebrate = _tutorial != null or _stars() > 0 or (_endless and _orders.score > 0)
@@ -396,13 +425,20 @@ func _draw_hud() -> void:
 	# Nome do restaurante no início da ronda.
 	if _clock < 2.4 and not _tutorial:
 		var a := clampf(minf(_clock / 0.3, (2.4 - _clock) / 0.4), 0.0, 1.0)
-		var banner := Rect2(440, 300 - (1.0 - a) * 30, 400, 96)
+		var banner := Rect2(420, 290 - (1.0 - a) * 30, 440, 118)
 		_hud.draw_style_box(UiStyle.panel_box(), banner)
-		_hud.draw_string(font, banner.position + Vector2(0, 48), _level["name"], HORIZONTAL_ALIGNMENT_CENTER, banner.size.x, 40, Color(UiStyle.INK, a))
-		_hud.draw_string(font, banner.position + Vector2(0, 78), _level["place"], HORIZONTAL_ALIGNMENT_CENTER, banner.size.x, 22, Color(UiStyle.INK_SOFT, a))
+		var sub: String = _level["place"]
+		if _level.has("stage_name"):
+			sub = "Nível %d  ·  %s" % [int(_level["stage"]) + 1, _level["stage_name"]]
+		elif _endless:
+			sub = "Casa Aberta  ·  " + sub
+		_hud.draw_string(font, banner.position + Vector2(0, 52), _level["name"], HORIZONTAL_ALIGNMENT_CENTER, banner.size.x, 40, Color(UiStyle.INK, a))
+		_hud.draw_string(font, banner.position + Vector2(0, 84), sub, HORIZONTAL_ALIGNMENT_CENTER, banner.size.x, 24, Color(UiStyle.INK_SOFT, a))
+		if _level.has("desc"):
+			_hud.draw_string(font, banner.position + Vector2(0, 106), _level["desc"], HORIZONTAL_ALIGNMENT_CENTER, banner.size.x, 18, Color(UiStyle.INK_SOFT, a * 0.8))
 	# FPS para medir o desempenho em PCs fracos.
 	if Gfx.show_fps:
-		_hud.draw_string(font, Vector2(8, 712), "FPS %d" % Engine.get_frames_per_second(),
+		_hud.draw_string(font, Vector2(112, 712), "FPS %d" % Engine.get_frames_per_second(),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 14, UiStyle.MUTED)
 	if _finished:
 		_draw_results()
@@ -694,7 +730,7 @@ func _context_actions(chef: Chef, st: Station) -> Array:
 			out.append([&"pick", "Pegar prato"])
 		elif st.item:
 			if st is BoardStation and st.item.can_chop():
-				out.append([&"use", "Cortar"])
+				out.append([&"use", "Cortar" if st.item.count <= 1 else "Cortar os %d" % st.item.count])
 			out.append([&"pick", "Pegar"])
 		return out
 	if st is TableStation:
@@ -715,10 +751,16 @@ func _context_actions(chef: Chef, st: Station) -> Array:
 			out.append([&"pick", "Juntar"])
 		elif st.item and held.is_plate() and st.item.cook_state == StoveStation.State.READY:
 			out.append([&"pick", "Servir no prato"])
-	elif st is CrateStation or st is RegisterStation or st is PlateStation:
+	elif st is CrateStation:
+		var crate := st as CrateStation
+		if held.is_ingredient() and held.kind == crate.ingredient and not held.chopped and held.count < held.max_count():
+			out.append([&"pick", "Pegar mais um (%d/%d)" % [held.count + 1, held.max_count()]])
+	elif st is RegisterStation or st is PlateStation:
 		pass
 	elif st.item == null:
 		out.append([&"pick", "Pousar"])
+	elif held.can_merge(st.item):
+		out.append([&"pick", "Juntar (%d)" % (held.count + st.item.count)])
 	elif held.is_plate() or st.item.is_plate() or st.item.is_cookware():
 		out.append([&"pick", "Juntar"])
 	return out
@@ -828,8 +870,11 @@ func _draw_results() -> void:
 			HORIZONTAL_ALIGNMENT_CENTER, w - 100, 24, -1, UiStyle.INK_SOFT)
 		_prompt(Vector2(x + w / 2.0, y + 380), "{pick} Ir jogar")
 		return
-	_hud.draw_string(font, Vector2(x, y + 90), "Fim do serviço!", HORIZONTAL_ALIGNMENT_CENTER, w, 52, UiStyle.INK)
-	_hud.draw_string(font, Vector2(x, y + 140), "Pagos: %d    Falhados: %d" % [_orders.paid_count, _orders.failed_count],
+	_hud.draw_string(font, Vector2(x, y + 80), "Fim do serviço!", HORIZONTAL_ALIGNMENT_CENTER, w, 52, UiStyle.INK)
+	if _level.has("stage_name"):
+		_hud.draw_string(font, Vector2(x, y + 112), "%s  ·  Nível %d: %s" % [_level["name"], int(_level["stage"]) + 1, _level["stage_name"]],
+			HORIZONTAL_ALIGNMENT_CENTER, w, 22, UiStyle.INK_SOFT)
+	_hud.draw_string(font, Vector2(x, y + 142), "Pagos: %d    Falhados: %d    Servidos: %d" % [_orders.paid_count, _orders.failed_count, _orders.delivered_count],
 		HORIZONTAL_ALIGNMENT_CENTER, w, 24, UiStyle.INK_SOFT)
 	_hud.draw_texture_rect(Art.COIN, Rect2(Vector2(x + w / 2 - 90, y + 168), Vector2(36, 36)), false)
 	_hud.draw_string(font, Vector2(x + w / 2 - 44, y + 200), "%d" % roundi(_shown_score), HORIZONTAL_ALIGNMENT_LEFT, -1, 40, UiStyle.INK)
@@ -851,7 +896,48 @@ func _draw_results() -> void:
 		var tex := Art.STAR if full else Art.STAR_EMPTY
 		var size := tex.get_size() * s / 2.0
 		_hud.draw_texture_rect(tex, Rect2(center - size / 2.0, size), false)
-	_prompt(Vector2(x + w / 2.0, y + 395), "À espera do host..." if Net.is_client() else "{pick} Voltar ao lobby")
+	if Net.is_client():
+		_prompt(Vector2(x + w / 2.0, y + 395), "À espera do host...")
+	elif _has_next():
+		_prompt(Vector2(x + w / 2.0, y + 372), "{pick} Próximo nível")
+		_prompt(Vector2(x + w / 2.0, y + 412), "{throw} Repetir    {dash} Escolher nível")
+	else:
+		_prompt(Vector2(x + w / 2.0, y + 372), "{pick} Jogar outra vez")
+		_prompt(Vector2(x + w / 2.0, y + 412), "{dash} Escolher nível")
+
+
+## Botões do fim para quem joga com o rato (o comando usa ✕, △ e ○).
+func _show_results_buttons() -> void:
+	_pause_button.hide()
+	if Net.is_client():
+		return
+	var add := func(text: String, cb: Callable, w: float):
+		_results_buttons.add_child(UiStyle.button(text, func():
+			_finish_time = maxf(_finish_time, 1.0)
+			cb.call(), w, false))
+	if _tutorial:
+		add.call("Ir jogar", _on_confirm, 220)
+		add.call("Menu principal", _on_results_back, 240)
+	elif _endless:
+		add.call("Escolher restaurante", _on_confirm, 300)
+	else:
+		if _has_next():
+			add.call("Próximo nível", _on_confirm, 240)
+			add.call("Repetir", _on_retry, 180)
+		else:
+			add.call("Jogar outra vez", _on_confirm, 240)
+		add.call("Escolher nível", _on_results_back, 220)
+	# Aparecem depois das estrelas.
+	_results_buttons.modulate.a = 0.0
+	_results_buttons.show()
+	var t := create_tween()
+	t.tween_interval(1.6)
+	t.tween_property(_results_buttons, "modulate:a", 1.0, 0.3)
+
+
+## Há um nível a seguir, e já está aberto (ganhou-se pelo menos uma estrela)?
+func _has_next() -> bool:
+	return not _tutorial and not _endless and _stars() > 0 and int(_level.get("stage", 0)) < Levels.STAGES - 1
 
 
 ## Legenda a piscar devagar, com o botão desenhado. `center` é o meio da linha.
@@ -935,8 +1021,8 @@ func _rpc_throw(slot: int, pos: Vector2, dir: Vector2) -> void:
 
 func _on_pause() -> void:
 	if _finished:
-		if Net.is_host():
-			_back_to_lobby()
+		# Start só serve para começar: no fim, é o mesmo que ✕ (próximo nível ou repetir).
+		_on_confirm()
 		return
 	if _pause_menu.is_open():
 		_pause_menu.close()
@@ -1087,7 +1173,7 @@ func _draw_endless_results(x: float, y: float, w: float) -> void:
 		_hud.draw_set_transform(Vector2.ZERO)
 	else:
 		_hud.draw_string(font, Vector2(x, y + 300), "Recorde: %d" % GameState.best_endless(_level["id"]), HORIZONTAL_ALIGNMENT_CENTER, w, 26, UiStyle.INK_SOFT)
-	_prompt(Vector2(x + w / 2.0, y + 395), "À espera do host..." if Net.is_client() else "{pick} Voltar ao lobby")
+	_prompt(Vector2(x + w / 2.0, y + 395), "À espera do host..." if Net.is_client() else "{pick} Escolher restaurante")
 
 
 func _snapshot() -> Array:
@@ -1186,13 +1272,53 @@ func _rpc_snapshot(data: Array) -> void:
 
 
 func _on_confirm() -> void:
-	if not _finished or Net.is_client():
+	if not _finished or Net.is_client() or _finish_time < 0.8:
 		return
 	if _tutorial:
 		GameState.mode = GameState.Mode.PLAY
 		Transition.reload()
+	elif _endless:
+		_to_level_select()
+	elif _has_next():
+		_start_stage(GameState.level, int(_level["stage"]) + 1)
 	else:
-		_back_to_lobby()
+		_start_stage(GameState.level, int(_level["stage"]))
+
+
+## △ no fim: repetir o mesmo nível.
+func _on_retry() -> void:
+	if not _finished or Net.is_client() or _tutorial or _endless or _finish_time < 0.8:
+		return
+	_start_stage(GameState.level, int(_level["stage"]))
+
+
+## ○ no fim: voltar à escolha do restaurante e do nível.
+func _on_results_back() -> void:
+	if not _finished or Net.is_client() or _finish_time < 0.8:
+		return
+	Sfx.play("ui_back")
+	if _tutorial:
+		Net.leave()
+		Transition.go("res://scenes/main_menu.tscn")
+		return
+	_to_level_select()
+
+
+func _start_stage(index: int, stage: int) -> void:
+	Sfx.play("ui_confirm")
+	GameState.choose(index, stage)
+	if Net.online:
+		Net.start_level.rpc(index, GameState.helpers, GameState.endless, [GameState.difficulty, GameState.custom, stage])
+	else:
+		GameState.mode = GameState.Mode.PLAY
+		Transition.reload()
+
+
+func _to_level_select() -> void:
+	if Net.online:
+		Net.open_level_select.rpc()
+	else:
+		Transition.go("res://scenes/level_select.tscn")
 
 
 func _back_to_lobby() -> void:

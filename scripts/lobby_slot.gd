@@ -5,6 +5,9 @@ extends Control
 
 const CHEF_SCALE := 6.0
 
+## Clique do rato no cartão: o lobby decide o que fazer (entrar, trocar...).
+signal clicked(index: int, button: int, at: Vector2)
+
 var index := 0
 var _player := {}
 var _time := 0.0
@@ -20,6 +23,13 @@ func set_player(player: Dictionary) -> void:
 		_bump = 1.0
 	_player = player
 	queue_redraw()
+
+
+func _gui_input(event: InputEvent) -> void:
+	var mb := event as InputEventMouseButton
+	if mb and mb.pressed:
+		clicked.emit(index, mb.button_index, mb.position)
+		accept_event()
 
 
 func bump(dir: int) -> void:

@@ -6,6 +6,9 @@ extends CharacterBody2D
 
 signal pause_requested
 signal confirm_pressed
+## No ecrã do fim: ○ volta à escolha do nível e △ repete.
+signal back_pressed
+signal retry_pressed
 signal interact_requested
 signal throw_requested
 
@@ -111,7 +114,7 @@ func _animate(delta: float) -> void:
 		_celebrate_time += delta
 	_hand = _hand.lerp(facing.round() * 9 + Vector2(0, 2), minf(delta * 18.0, 1.0))
 	# Som e "esmagar" quando o que tem na mão muda (funciona igual online).
-	var key := "" if held == null else "%s%s%s%s%d" % [held.kind, held.chopped, held.contents, held.dirty, held.stack]
+	var key := "" if held == null else "%s%s%s%s%d%d" % [held.kind, held.chopped, held.contents, held.dirty, held.stack, held.count]
 	if key != _held_key:
 		if _held_key == "":
 			Sfx.play("pickup")
@@ -132,6 +135,10 @@ func _local_update(delta: float) -> void:
 		use_down = false
 		if source.just_pressed(&"pick"):
 			confirm_pressed.emit()
+		elif source.just_pressed(&"dash"):
+			back_pressed.emit()
+		elif source.just_pressed(&"throw"):
+			retry_pressed.emit()
 		return
 
 	var input := source.move

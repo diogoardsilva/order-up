@@ -45,6 +45,8 @@ const SAVE_PATH := "user://save.cfg"
 var mode := Mode.PLAY
 ## Restaurante escolhido (índice em Levels.ALL).
 var level := 0
+## Nível dentro do restaurante (0 a Levels.STAGES - 1).
+var stage := 0
 ## Opção escolhida para cada ajudante (índice em HELPER_PRESETS).
 var helpers: Array = [1, 0, 0, 0, 0, 0, 0, 0]
 ## Modo Casa Aberta: sem relógio, abre-se a porta quando se quer e só acaba
@@ -77,6 +79,8 @@ func _ready() -> void:
 		var c: Variant = cfg.get_value("progress", "custom", custom)
 		if c is Array and c.size() == 3:
 			custom = [clampi(c[0], 0, CUSTOM_PATIENCE.size() - 1), clampi(c[1], 0, CUSTOM_SPAWN.size() - 1), clampi(c[2], 0, CUSTOM_TIME.size() - 1)]
+		level = clampi(cfg.get_value("progress", "level", 0), 0, 4)
+		stage = clampi(cfg.get_value("progress", "stage", 0), 0, 4)
 		last_ip = cfg.get_value("net", "last_ip", "")
 		fullscreen = cfg.get_value("options", "fullscreen", true)
 		music_volume = cfg.get_value("options", "music_volume", 0.5)
@@ -132,6 +136,28 @@ func best_stars(level_id: String) -> int:
 	cfg.load(SAVE_PATH)
 	# As estrelas também ficam no perfil (e na conta online).
 	return maxi(cfg.get_value("stars", level_id, 0), _profile_stat("lv_%s_stars_best" % level_id))
+
+
+## Um nível está aberto se for o primeiro do restaurante ou se o anterior
+## já tiver pelo menos uma estrela.
+func stage_unlocked(index: int, p_stage: int) -> bool:
+	return p_stage <= 0 or best_stars(Levels.stage_id(index, p_stage - 1)) > 0
+
+
+## Estrelas ganhas num restaurante (soma dos níveis).
+func restaurant_stars(index: int) -> int:
+	var total := 0
+	for k in Levels.STAGES:
+		total += best_stars(Levels.stage_id(index, k))
+	return total
+
+
+## Lembra o último restaurante e nível escolhidos.
+func choose(index: int, p_stage: int) -> void:
+	level = index
+	stage = p_stage
+	_save("progress", "level", index)
+	_save("progress", "stage", p_stage)
 
 
 func save_stars(level_id: String, stars: int) -> void:

@@ -10,6 +10,7 @@ const MAX_CUSTOMERS := 5
 const SPAWN_EVERY := 15.0
 ## Probabilidade de cada tamanho de grupo (1, 2, 3 e 4 pessoas).
 const GROUP_WEIGHTS: Array[float] = [0.3, 0.4, 0.18, 0.12]
+const BIG_GROUP_WEIGHTS: Array[float] = [0.12, 0.33, 0.25, 0.3]
 const FIRST_SPAWN := 2.0
 const FAIL_PENALTY := 10
 const MAX_TIP := 10
@@ -38,6 +39,10 @@ var menu: Array[Dictionary] = Recipes.ALL.slice(0, 2)
 var drinks: Array[Dictionary] = []
 ## Dificuldade: multiplicador da paciência dos clientes.
 var patience_scale := 1.0
+## Multiplicador dos pontos pagos (os níveis de festa pagam mais).
+var points_scale := 1.0
+## Grupos maiores (níveis de festa e almoços de família).
+var big_groups := false
 ## Pontos pagos por pratos entregues a mesas que se foram embora antes do fim.
 var partial_paid := 0
 var _spawn := SPAWN_EVERY - FIRST_SPAWN
@@ -70,7 +75,7 @@ func _process(delta: float) -> void:
 func _random_order() -> Array[Dictionary]:
 	var roll := randf()
 	var size := 1
-	for w in GROUP_WEIGHTS:
+	for w in (BIG_GROUP_WEIGHTS if big_groups else GROUP_WEIGHTS):
 		roll -= w
 		if roll <= 0.0:
 			break
@@ -110,7 +115,7 @@ func front_of_queue() -> Customer:
 
 ## Um chef acabou de cobrar ao primeiro da fila.
 func charge(customer: Customer) -> void:
-	var points := customer.points()
+	var points := roundi(customer.points() * points_scale)
 	score += points
 	paid_count += 1
 	paid.emit(points, kitchen.register_center())

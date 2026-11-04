@@ -3,9 +3,10 @@ extends Control
 ## escolhe o personagem com esquerda/direita. Online, os jogadores de todos os
 ## PCs aparecem aqui e só o anfitrião começa.
 
-const SLOT_SIZE := Vector2(270, 410)
+const SLOT_SIZE := Vector2(270, 392)
 
 var _slots: Array[LobbySlot] = []
+var _start_button: Button
 var _pads_label: Label
 var _room_label: Label
 ## Último valor de move.x de cada fonte, para detetar o toque em esquerda/direita.
@@ -18,12 +19,8 @@ func _ready() -> void:
 	UiStyle.background(self)
 	var root := VBoxContainer.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_theme_constant_override("separation", 14)
+	root.add_theme_constant_override("separation", 8)
 	add_child(root)
-
-	var top := Control.new()
-	top.custom_minimum_size.y = 18
-	root.add_child(top)
 	root.add_child(UiStyle.label(
 		"Tutorial: quem vai aprender?" if GameState.mode == GameState.Mode.TUTORIAL else "Quem vai cozinhar?", 52, UiStyle.TEXT, 10))
 
@@ -37,13 +34,22 @@ func _ready() -> void:
 		slot.custom_minimum_size = SLOT_SIZE
 		row.add_child(slot)
 		_slots.append(slot)
+		slot.clicked.connect(_on_slot_clicked)
 
 	# Legendas com os botões desenhados como no comando (ou teclado).
-	var help := PromptBar.new([[&"pick", "Entrar"], [&"move", "Chef (⇆) e papel (⇅)"], [&"throw", "Perfil"], [&"dash", "Sair"], [&"pause", "Começar"]])
+	var help := PromptBar.new([[&"pick", "Entrar"], [&"move", "Chef (⇆) e papel (⇅)"], [&"throw", "Perfil"], [&"dash", "Sair / voltar"], [&"pause", "Começar"]])
 	help.custom_minimum_size = Vector2(1280, 44)
 	root.add_child(help)
-	var help2 := UiStyle.label("Sem ninguém no lobby, Começar volta ao menu.", 18, UiStyle.MUTED, 4)
+	var help2 := UiStyle.label("Rato: clica num cartão para entrar, nos lados para trocar de chef, no papel para o mudar e no nome para o perfil. Botão direito: sair.", 17, UiStyle.MUTED, 4)
 	root.add_child(help2)
+	# Botões para quem joga só com o rato.
+	var buttons := HBoxContainer.new()
+	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
+	buttons.add_theme_constant_override("separation", 16)
+	buttons.add_child(UiStyle.button("Voltar", _go_back, 220, false))
+	_start_button = UiStyle.button("Começar", _start, 260, false)
+	buttons.add_child(_start_button)
+	root.add_child(buttons)
 	_pads_label = UiStyle.label("", 18, UiStyle.MUTED, 6)
 	root.add_child(_pads_label)
 	_room_label = UiStyle.label(_room_text(), 22, UiStyle.GOLD, 6)
@@ -91,23 +97,82 @@ func _process(_delta: float) -> void:
 		elif joined and source.just_pressed(&"dash"):
 			PlayerRegistry.leave(source)
 			Sfx.play("ui_back")
+		elif not joined and source.just_pressed(&"dash"):
+			# A bola volta atrás: sem ninguém no lobby (ou num PC que só está a ver), volta ao menu.
+			if PlayerRegistry.players.is_empty() or (Net.online and not _has_local_player()):
+				_go_back()
+				return
 		elif source.just_pressed(&"pause"):
-			if PlayerRegistry.players.is_empty() or (Net.is_client() and not joined):
-				Net.leave()
+			# Start só serve para começar.
+			if Net.is_client() and not joined:
 				Sfx.play("ui_back")
-				Transition.go("res://scenes/main_menu.tscn")
-			elif GameState.mode == GameState.Mode.TUTORIAL and not Net.online:
-				# O tutorial é sempre no primeiro restaurante.
-				Sfx.play("ui_confirm")
-				GameState.level = 0
-				Transition.go("res://scenes/level.tscn")
-			elif Net.online and Net.is_host():
-				Sfx.play("ui_confirm")
-				Net.open_level_select.rpc()
-			elif not Net.online:
-				Sfx.play("ui_confirm")
-				Transition.go("res://scenes/level_select.tscn")
+			else:
+				_start()
 			return
+
+
+func _start() -> void:
+	if PlayerRegistry.players.is_empty() or Net.is_client():
+		Sfx.play("ui_back")
+		return
+	Sfx.play("ui_confirm")
+	if GameState.mode == GameState.Mode.TUTORIAL and not Net.online:
+		# O tutorial é sempre no primeiro restaurante.
+		GameState.level = 0
+		GameState.stage = 0
+		Transition.go("res://scenes/level.tscn")
+	elif Net.online:
+		Net.open_level_select.rpc()
+	else:
+		Transition.go("res://scenes/level_select.tscn")
+
+
+func _go_back() -> void:
+	Net.leave()
+	Sfx.play("ui_back")
+	Transition.go("res://scenes/main_menu.tscn")
+
+
+## Rato: cartão vazio = entrar com o teclado; nos lados troca de chef, no papel
+## muda de papel, no nome muda de perfil; botão direito sai.
+func _on_slot_clicked(index: int, button: int, at: Vector2) -> void:
+	var player := PlayerRegistry.get_player(index)
+	if player.is_empty():
+		if button != MOUSE_BUTTON_LEFT:
+			return
+		for source in DeviceManager.all_sources():
+			if source is KeyboardSource and not PlayerRegistry.has_source(source):
+				PlayerRegistry.join(source)
+				Sfx.play("ui_confirm")
+				return
+		return
+	var source: InputSource = player["source"]
+	if source is RemoteSource:
+		return
+	var slot := _slots[index]
+	if button == MOUSE_BUTTON_RIGHT:
+		PlayerRegistry.leave(source)
+		Sfx.play("ui_back")
+	elif button == MOUSE_BUTTON_WHEEL_UP or button == MOUSE_BUTTON_WHEEL_DOWN:
+		PlayerRegistry.cycle_role(source, -1 if button == MOUSE_BUTTON_WHEEL_UP else 1)
+		Sfx.play("ui_move")
+	elif button == MOUSE_BUTTON_LEFT:
+		if at.y < 64:
+			PlayerRegistry.cycle_profile(source, 1)
+		elif at.y > slot.size.y / 2.0 + 120 and at.y < slot.size.y / 2.0 + 172:
+			PlayerRegistry.cycle_role(source, -1 if at.x < slot.size.x / 2.0 else 1)
+		else:
+			var dir := -1 if at.x < slot.size.x / 2.0 else 1
+			PlayerRegistry.cycle_character(source, dir)
+			slot.bump(dir)
+		Sfx.play("ui_move")
+
+
+func _has_local_player() -> bool:
+	for p in PlayerRegistry.players:
+		if not p["source"] is RemoteSource:
+			return true
+	return false
 
 
 func _room_text() -> String:

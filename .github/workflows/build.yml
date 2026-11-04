@@ -55,6 +55,27 @@ jobs:
           dest=~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
           mkdir -p "$dest" && cp ~/godot/templates/* "$dest/"
 
+      - name: Check scripts (abre cada ecrã uns segundos e procura erros)
+        if: matrix.platform == 'linux'
+        run: |
+          godot=~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
+          $godot --headless --import > import.log 2>&1 || true
+          fail=0
+          for scene in main_menu lobby level_select level; do
+            timeout 120 $godot --headless --quit-after 400 res://scenes/$scene.tscn > run_$scene.log 2>&1 || true
+            echo "--- $scene ($(wc -l < run_$scene.log) linhas) ---"; grep -iE "error|warning" run_$scene.log | head -20 || true
+            if grep -E "SCRIPT ERROR|Parse Error|Invalid call|Invalid access|Invalid assignment|Cannot call|Failed to load script|formatting error" run_$scene.log; then
+              echo "::error::Erros ao abrir $scene"
+              fail=1
+            fi
+          done
+          grep -E "Parse Error|Failed to load script" import.log && fail=1
+          # Testes da lógica (níveis, doses duplas, vários ingredientes na mão).
+          timeout 120 $godot --headless res://tests/logic_test.tscn > test.log 2>&1 || true
+          grep -E "TEST FAIL|TESTS|SCRIPT ERROR|Parse Error" test.log || echo "::error::Os testes não correram"
+          grep -q "TESTS OK" test.log || fail=1
+          exit $fail
+
       - name: Export
         run: |
           godot=~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
@@ -87,6 +108,48 @@ jobs:
         with:
           name: pck-${{ matrix.platform }}
           path: pck/
+
+  # Capturas do jogo (xvfb), publicadas no release "screens" para se verem
+  # sem login. Não mexe no "latest" (o das atualizações).
+  screens:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache Godot
+        uses: actions/cache@v4
+        with:
+          path: ~/godot
+          key: godot-${{ env.GODOT_VERSION }}-linux
+      - name: Download Godot
+        run: |
+          if [ ! -f ~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64 ]; then
+            mkdir -p ~/godot && cd ~/godot
+            curl -sSLo godot.zip "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+            unzip -q godot.zip && rm godot.zip
+          fi
+      - name: Take screenshots
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb libgl1-mesa-dri > /dev/null
+          godot=~/godot/Godot_v${GODOT_VERSION}-stable_linux.x86_64
+          $godot --headless --import > import.log 2>&1 || true
+          mkdir -p shots
+          SHOTS_DIR=$PWD/shots timeout 180 xvfb-run -a -s "-screen 0 1280x720x24" $godot --rendering-driver opengl3 --resolution 1280x720 res://tests/shots.tscn 2>&1 | grep -E "SHOT|ERROR|error" | head -40 || true
+          ls -la shots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screens
+          path: shots/
+      - name: Publish release "screens"
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls shots/*.png > /dev/null 2>&1 || exit 0
+          gh release delete screens --yes --cleanup-tag || true
+          gh release create screens shots/*.png --target "${{ github.event.pull_request.head.sha || github.sha }}" --prerelease \
+            --title "Capturas (build ${{ github.run_number }})" --notes "Capturas automáticas do jogo, build ${{ github.run_number }}."
 
   # Publica no release "latest" (público, sem login): os jogos instalados
   # descarregam o pacote novo sozinhos; os zips servem para instalar de raiz.
