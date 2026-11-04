@@ -73,6 +73,11 @@ func _ready() -> void:
 		var stage_name: String = rest["stages"][clampi(GameState.stage, 0, Levels.STAGES - 1)]["name"]
 		_continue_button = UiStyle.button("Continuar: %s %d" % [rest["name"], GameState.stage + 1], _start_local, 360)
 		_continue_button.tooltip_text = stage_name
+		# Texto à esquerda e um pouco menor, para não ficar por baixo do botão do comando.
+		_continue_button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_continue_button.add_theme_font_size_override("font_size", 22)
+		_continue_button.add_theme_constant_override("h_separation", 0)
+		_continue_button.text = "  " + _continue_button.text
 		_main_box.add_child(_continue_button)
 	_first_button = UiStyle.button("Jogar", func(): _go_page(_play_box), 360)
 	_main_box.add_child(_first_button)
