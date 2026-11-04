@@ -21,6 +21,9 @@ var _edit: LineEdit
 var _list: VBoxContainer
 var _first: Button
 var _refresh_time := 0.0
+## Aberto pelas boas-vindas da primeira vez: ao entrar (ou criar a conta) segue sozinho.
+var welcome := false
+var _back: Button
 
 
 func _ready() -> void:
@@ -103,7 +106,8 @@ func _ready() -> void:
 		await Online.logout()
 		_refresh_header()
 		focus_first(), 620))
-	col.add_child(UiStyle.button("Voltar", func(): closed.emit(), 620))
+	_back = UiStyle.button("Voltar", func(): closed.emit(), 620)
+	col.add_child(_back)
 	Online.friends_changed.connect(_refresh_list)
 	Online.status_changed.connect(_refresh_header)
 	visibility_changed.connect(func():
@@ -122,6 +126,7 @@ func focus_first() -> void:
 
 func _open() -> void:
 	Online.message = ""
+	_back.text = "Agora não" if welcome and not Online.logged_in() else "Voltar"
 	_user_edit.text = Online.username()
 	_pass_edit.text = ""
 	_refresh_header()
@@ -140,6 +145,7 @@ func _login() -> void:
 		_pass_edit.text = ""
 		_refresh_header()
 		focus_first()
+		_welcome_next()
 
 
 func _register() -> void:
@@ -150,6 +156,17 @@ func _register() -> void:
 		_pass_edit.text = ""
 		_refresh_header()
 		focus_first()
+		_welcome_next()
+
+
+## Nas boas-vindas, depois de entrar passa sozinho ao boneco.
+func _welcome_next() -> void:
+	if not welcome:
+		return
+	_back.text = "Continuar"
+	await get_tree().create_timer(1.2).timeout
+	if visible:
+		closed.emit()
 
 
 func _process(delta: float) -> void:

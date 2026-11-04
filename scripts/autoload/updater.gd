@@ -16,6 +16,8 @@ const DIR := "user://updates/"
 const INFO := DIR + "game.json"
 const TRY := DIR + "trying.json"
 const CHECK_EVERY := 30.0 * 60.0
+## Build para a qual o ecrã de arranque já reiniciou o jogo (só uma vez por build).
+const RESTARTED := DIR + "restarted.json"
 
 ## "", "checking", "downloading", "ready", "latest", "error"
 var state := ""
@@ -155,6 +157,23 @@ func _confirm_boot() -> void:
 	_write(TRY, trying)
 
 
+## Este jogo pode atualizar-se (não no editor nem num sistema sem pacote).
+func can_update() -> bool:
+	return not OS.is_debug_build() and platform() != ""
+
+
+## Procura já (o ecrã de arranque usa isto) e recomeça a contagem dos 30 min.
+func check_now() -> void:
+	_timer = 0.0
+	check()
+
+
+## O ecrã de arranque só reinicia sozinho uma vez para cada build: se mesmo
+## assim a versão nova não pegar, fica o botão no menu e não entra em ciclo.
+func can_auto_restart() -> bool:
+	return int(_read(RESTARTED).get("build", -1)) != _downloaded_build()
+
+
 ## Vê se há versão nova e, se houver, descarrega-a.
 func check() -> void:
 	if state in ["checking", "downloading"]:
@@ -208,12 +227,15 @@ func check() -> void:
 
 
 ## Fecha e volta a abrir o jogo, que ao arrancar carrega a atualização.
-func restart_now() -> void:
+func restart_now() -> bool:
 	if state != "ready":
-		return
+		return false
+	_write(RESTARTED, {"build": _downloaded_build()})
 	Profiles.save()
 	if OS.create_process(OS.get_executable_path(), OS.get_cmdline_args()) > 0:
 		get_tree().quit()
+		return true
+	return false
 
 
 ## Texto curto para o menu principal ("" quando não há nada a dizer).

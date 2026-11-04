@@ -10,6 +10,10 @@ const TITLE_SIZE_BOX := Vector2(440, 210)
 const DEMO_TAKE_AFTER := 1.2
 const DEMO_SERVE_AFTER := 3.5
 
+## Por preload (e não pelo class_name): quem atualiza a partir da 0.6.0 recebe
+## estes scripts num pacote novo, e as classes novas só se registam ao arrancar.
+const BOOT_SCREEN := preload("res://scripts/boot_screen.gd")
+const WELCOME_FLOW := preload("res://scripts/welcome_flow.gd")
 var _time := 0.0
 var _kitchen: Kitchen
 var _orders: OrderManager
@@ -177,6 +181,29 @@ func _ready() -> void:
 	_first_button.grab_focus()
 	_intro()
 	Sfx.music_on()
+	# Ao abrir o jogo: primeiro as atualizações, depois (só da primeira vez)
+	# as boas-vindas com a conta e o boneco.
+	if not GameState.booted:
+		GameState.booted = true
+		var boot := BOOT_SCREEN.new()
+		boot.finished.connect(_after_boot)
+		add_child(boot)
+	else:
+		_after_boot()
+
+
+func _after_boot() -> void:
+	if GameState.welcome_done:
+		_first_button.grab_focus()
+		return
+	# Os botões do menu escondem-se para o comando não lhes ir parar.
+	_column.hide()
+	var welcome := WELCOME_FLOW.new()
+	welcome.finished.connect(func():
+		_column.show()
+		_pop(_column)
+		_first_button.grab_focus())
+	add_child(welcome)
 
 
 ## Uma página do menu, com uma fita com o título (a principal não tem).

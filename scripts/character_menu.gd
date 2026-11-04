@@ -18,6 +18,9 @@ var _first: Button
 var _preview: Control
 var _title: Label
 var _time := 0.0
+## Aberto pelas boas-vindas da primeira vez.
+var welcome := false
+var _cancel: Button
 
 
 func _ready() -> void:
@@ -56,7 +59,8 @@ func _ready() -> void:
 		_look = CharacterLook.random()
 		_refresh(), ROW_WIDTH))
 	col.add_child(UiStyle.button("Guardar", _save, ROW_WIDTH))
-	col.add_child(UiStyle.button("Cancelar", func(): closed.emit(), ROW_WIDTH))
+	_cancel = UiStyle.button("Cancelar", func(): closed.emit(), ROW_WIDTH)
+	col.add_child(_cancel)
 	visibility_changed.connect(func():
 		if visible:
 			_open())
@@ -70,6 +74,9 @@ func focus_first() -> void:
 func _open() -> void:
 	_look = Profiles.look(Profiles.active).duplicate()
 	_title.text = "Boneco de %s" % Profiles.profile_name(Profiles.active)
+	if welcome:
+		_title.text = "Cria o teu boneco"
+		_cancel.text = "Fica como está"
 	_refresh()
 
 

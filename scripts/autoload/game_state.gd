@@ -56,6 +56,10 @@ var difficulty := 1
 ## Índices nas opções do modo personalizado: [paciência, clientes, tempo].
 var custom := [2, 2, 2]
 var tutorial_done := false
+## Já viu as boas-vindas (conta e boneco) da primeira vez.
+var welcome_done := false
+## O ecrã de atualizações já apareceu nesta sessão.
+var booted := false
 var last_ip := ""
 ## Mensagem a mostrar no menu (ex. ligação perdida).
 var menu_message := ""
@@ -74,6 +78,7 @@ func _ready() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(SAVE_PATH) == OK:
 		tutorial_done = cfg.get_value("progress", "tutorial_done", false)
+		welcome_done = cfg.get_value("progress", "welcome_done", false)
 		endless = cfg.get_value("progress", "endless", false)
 		difficulty = clampi(cfg.get_value("progress", "difficulty", 1), 0, DIFFICULTIES.size() - 1)
 		var c: Variant = cfg.get_value("progress", "custom", custom)
@@ -163,6 +168,11 @@ func choose(index: int, p_stage: int) -> void:
 func save_stars(level_id: String, stars: int) -> void:
 	if stars > best_stars(level_id):
 		_save("stars", level_id, stars)
+
+
+func mark_welcome_done() -> void:
+	welcome_done = true
+	_save("progress", "welcome_done", true)
 
 
 func mark_tutorial_done() -> void:
