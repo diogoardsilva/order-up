@@ -20,6 +20,8 @@ var _orders: OrderManager
 var _level: Dictionary
 var _vignette: Texture2D
 var _got_snapshot := false
+## As estrelas pedem menos pontos nos salões pequenos dos primeiros níveis.
+var _seat_scale := 1.0
 var _kitchen: Kitchen
 var _hud: Control
 var _time_left := ROUND_TIME
@@ -80,10 +82,23 @@ func _ready() -> void:
 	add_child(_orders)
 	_kitchen = Kitchen.new(_orders, _level)
 	_kitchen.name = "Kitchen"
-	_kitchen.position = KITCHEN_OFFSET * WORLD_SCALE
-	_kitchen.scale = Vector2.ONE * WORLD_SCALE
+	# Salões maiores (níveis 5 a 10) encolhem para caber no mesmo espaço.
+	var area := Vector2(Levels.LAYOUT[0].length(), Levels.LAYOUT.size()) * Kitchen.TILE * WORLD_SCALE
+	var size := _kitchen.pixel_size()
+	var fit := minf(WORLD_SCALE, minf(area.x / size.x, area.y / size.y))
+	_kitchen.scale = Vector2.ONE * fit
+	_kitchen.position = KITCHEN_OFFSET * WORLD_SCALE + (area - size * fit) / 2.0
 	add_child(_kitchen)
 	_orders.kitchen = _kitchen
+	# Mais mesas, mais grupos: o ritmo e as estrelas acompanham os lugares do salão
+	# (16 lugares = o salão antigo).
+	var seats := 0
+	for t in _kitchen.tables():
+		seats += t.capacity()
+	_orders.max_customers = maxi(OrderManager.MAX_CUSTOMERS, _kitchen.tables().size())
+	if not _endless:
+		_orders.spawn_every *= clampf(sqrt(16.0 / maxf(seats, 1.0)), 0.6, 1.3)
+	_seat_scale = lerpf(1.0, clampf(seats / 16.0, 0.5, 1.0), 0.6)
 	if _endless:
 		_kitchen.door_button = true
 		_kitchen.door_used.connect(_on_door)
@@ -369,7 +384,7 @@ func _stars() -> int:
 	if _endless:
 		return 0
 	# As estrelas pedem mais pontos em rondas mais compridas.
-	var scale := _round_time / ROUND_TIME
+	var scale := _round_time / ROUND_TIME * _seat_scale
 	return _level["stars"].filter(func(s): return _orders.score >= s * scale).size()
 
 
@@ -770,7 +785,7 @@ func _context_actions(chef: Chef, st: Station) -> Array:
 
 
 func _to_screen(kitchen_pos: Vector2) -> Vector2:
-	return _kitchen.position + kitchen_pos * WORLD_SCALE
+	return _kitchen.position + kitchen_pos * _kitchen.scale.x
 
 
 ## Etiqueta centrada num ponto do ecrã.
@@ -899,9 +914,7 @@ func _draw_results() -> void:
 		var tex := Art.STAR if full else Art.STAR_EMPTY
 		var size := tex.get_size() * s / 2.0
 		_hud.draw_texture_rect(tex, Rect2(center - size / 2.0, size), false)
-	if Net.is_client():
-		_prompt(Vector2(x + w / 2.0, y + 395), "À espera do host...")
-	elif _has_next():
+	if _has_next():
 		_prompt(Vector2(x + w / 2.0, y + 372), "{pick} Próximo nível")
 		_prompt(Vector2(x + w / 2.0, y + 412), "{throw} Repetir    {dash} Escolher nível")
 	else:
@@ -912,8 +925,6 @@ func _draw_results() -> void:
 ## Botões do fim para quem joga com o rato (o comando usa ✕, △ e ○).
 func _show_results_buttons() -> void:
 	_pause_button.hide()
-	if Net.is_client():
-		return
 	var add := func(text: String, cb: Callable, w: float):
 		_results_buttons.add_child(UiStyle.button(text, func():
 			_finish_time = maxf(_finish_time, 1.0)
@@ -1087,9 +1098,9 @@ func _free_cell_near(start: Vector2i) -> Vector2i:
 				if maxi(absi(dx), absi(dy)) != radius:
 					continue
 				var c := start + Vector2i(dx, dy)
-				if c.y < 0 or c.y >= Kitchen.LAYOUT.size() or c.x < 0 or c.x >= Kitchen.LAYOUT[0].length():
+				if c.y < 0 or c.y >= _kitchen.layout.size() or c.x < 0 or c.x >= _kitchen.layout[0].length():
 					continue
-				var ch := Kitchen.LAYOUT[c.y][c.x]
+				var ch := _kitchen.layout[c.y][c.x]
 				if (ch == "." or ch.is_valid_int()) and not taken.has(c):
 					return c
 	return start
@@ -1176,7 +1187,7 @@ func _draw_endless_results(x: float, y: float, w: float) -> void:
 		_hud.draw_set_transform(Vector2.ZERO)
 	else:
 		_hud.draw_string(font, Vector2(x, y + 300), "Recorde: %d" % GameState.best_endless(_level["id"]), HORIZONTAL_ALIGNMENT_CENTER, w, 26, UiStyle.INK_SOFT)
-	_prompt(Vector2(x + w / 2.0, y + 395), "À espera do host..." if Net.is_client() else "{pick} Escolher restaurante")
+	_prompt(Vector2(x + w / 2.0, y + 395), "{pick} Escolher restaurante")
 
 
 func _snapshot() -> Array:
@@ -1275,7 +1286,11 @@ func _rpc_snapshot(data: Array) -> void:
 
 
 func _on_confirm() -> void:
-	if not _finished or Net.is_client() or _finish_time < 0.8:
+	if not _finished or _finish_time < 0.8:
+		return
+	if Net.is_client():
+		# Qualquer jogador pode avançar: o anfitrião faz o resto.
+		_rpc_results_input.rpc_id(1, "confirm")
 		return
 	if _tutorial:
 		GameState.mode = GameState.Mode.PLAY
@@ -1290,14 +1305,20 @@ func _on_confirm() -> void:
 
 ## △ no fim: repetir o mesmo nível.
 func _on_retry() -> void:
-	if not _finished or Net.is_client() or _tutorial or _endless or _finish_time < 0.8:
+	if not _finished or _tutorial or _endless or _finish_time < 0.8:
+		return
+	if Net.is_client():
+		_rpc_results_input.rpc_id(1, "retry")
 		return
 	_start_stage(GameState.level, int(_level["stage"]))
 
 
 ## ○ no fim: voltar à escolha do restaurante e do nível.
 func _on_results_back() -> void:
-	if not _finished or Net.is_client() or _finish_time < 0.8:
+	if not _finished or _finish_time < 0.8:
+		return
+	if Net.is_client():
+		_rpc_results_input.rpc_id(1, "back")
 		return
 	Sfx.play("ui_back")
 	if _tutorial:
@@ -1305,6 +1326,20 @@ func _on_results_back() -> void:
 		Transition.go("res://scenes/main_menu.tscn")
 		return
 	_to_level_select()
+
+
+## Um jogador noutro PC carregou num botão do fim do nível.
+@rpc("any_peer", "call_remote", "reliable")
+func _rpc_results_input(action: String) -> void:
+	if not multiplayer.is_server() or not _finished:
+		return
+	match action:
+		"confirm":
+			_on_confirm()
+		"retry":
+			_on_retry()
+		"back":
+			_on_results_back()
 
 
 func _start_stage(index: int, stage: int) -> void:

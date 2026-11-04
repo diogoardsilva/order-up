@@ -47,14 +47,14 @@ func _init(p_role: Role, p_chef: Chef, p_kitchen: Kitchen, p_orders: OrderManage
 	kitchen = p_kitchen
 	orders = p_orders
 	kitchen.helpers.append(self)
-	var size := Vector2i(Kitchen.LAYOUT[0].length(), Kitchen.LAYOUT.size())
+	var size := Vector2i(kitchen.layout[0].length(), kitchen.layout.size())
 	_astar.region = Rect2i(Vector2i.ZERO, size)
 	_astar.cell_size = Vector2.ONE
 	_astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_NEVER
 	_astar.update()
 	for y in size.y:
 		for x in size.x:
-			var c := Kitchen.LAYOUT[y][x]
+			var c := kitchen.layout[y][x]
 			if c != "." and not c.is_valid_int():
 				_astar.set_point_solid(Vector2i(x, y))
 
@@ -146,6 +146,9 @@ func _run_task() -> void:
 		_path.pop_front()
 	if not _path.is_empty():
 		move = (kitchen.cell_center(_path[0]) - chef.position).normalized()
+		if _straight_run() >= 4:
+			# Corredor comprido e direito à frente: desliza, como os jogadores.
+			buttons[&"dash"] = true
 		# Encravado (alguém no caminho)? Procura outro caminho.
 		_stuck_time = _stuck_time + _last_delta if chef.position.distance_to(_last_pos) < 0.5 else 0.0
 		_last_pos = chef.position
@@ -172,6 +175,24 @@ func _run_task() -> void:
 				buttons[&"use"] = true
 		"throw_away", "stand":
 			_task.clear()
+
+
+## Quantas células seguidas o caminho vai a direito na direção em que já anda
+## (alinhado com o centro das células, para o deslize não bater nas esquinas).
+func _straight_run() -> int:
+	if _path.is_empty():
+		return 0
+	var to := kitchen.cell_center(_path[0]) - chef.position
+	var step := Vector2i(signi(roundi(to.x)), 0) if absf(to.x) > absf(to.y) else Vector2i(0, signi(roundi(to.y)))
+	var off := absf(to.y) if step.x != 0 else absf(to.x)
+	if step == Vector2i.ZERO or off > 2.0:
+		return 0
+	var run := 1
+	for i in range(1, _path.size()):
+		if _path[i] - _path[i - 1] != step:
+			break
+		run += 1
+	return run
 
 
 func _go(cell: Vector2i, action := "pick", until := Callable()) -> Dictionary:
@@ -239,7 +260,7 @@ func _reachable(station: Station) -> bool:
 
 func _free_counter(near_dining := false) -> Station:
 	var counters := _stations(func(s): return s.get_script() == Station and s.item == null and s.cell.x < Kitchen.DINING_FROM_X - 1 \
-		and Kitchen.LAYOUT[s.cell.y][s.cell.x] == "C")
+		and kitchen.layout[s.cell.y][s.cell.x] == "C")
 	if near_dining:
 		counters.sort_custom(func(a, b): return a.cell.x > b.cell.x)
 	return counters[0] if not counters.is_empty() else null

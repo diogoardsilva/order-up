@@ -63,6 +63,10 @@ var _celebrate_time := 0.0
 
 func _ready() -> void:
 	net_target = position
+	# Os chefs mexem-se ao ritmo da física (60 por segundo); com mais FPS
+	# o desenho fica entre dois passos, para andarem suaves (ver GameState).
+	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_ON
+	reset_physics_interpolation.call_deferred()
 	var shape := RectangleShape2D.new()
 	shape.size = Vector2(SIZE, SIZE) * 0.8
 	var col := CollisionShape2D.new()
@@ -81,8 +85,11 @@ func _physics_process(delta: float) -> void:
 		_local_update(delta)
 	else:
 		# Segue a posição da rede com suavização; salta se estiver muito longe.
-		position = net_target if position.distance_to(net_target) > Kitchen.TILE * 2 \
-			else position.lerp(net_target, 0.35)
+		if position.distance_to(net_target) > Kitchen.TILE * 2:
+			position = net_target
+			reset_physics_interpolation()
+		else:
+			position = position.lerp(net_target, 0.35)
 	emote_left = maxf(emote_left - delta, 0.0)
 	_animate(delta)
 	queue_redraw()

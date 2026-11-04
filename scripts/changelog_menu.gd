@@ -6,6 +6,17 @@ extends Control
 signal closed
 
 const ENTRIES: Array = [
+	["0.7.0", [
+		"10 níveis em cada restaurante. Cada nível traz mais mesas e mais pratos.",
+		"O restaurante cresce: a partir do 5.º nível o salão fica maior, e nos últimos há mesas de 6, 8 e 10 pessoas (e festas para as encher).",
+		"10 pratos novos: bruschetta, salada com queijo, bife com batatas, pão com ovo, onigiri, nigiri de tamago, hambúrguer de cebola, cesto misto, polpette e salada de cogumelos.",
+		"Os ajudantes também deslizam nos corredores compridos.",
+		"Online: \"Criar sala\" ou \"Entrar numa sala\", com o código ou pela lista de amigos (botão Juntar).",
+		"Online: no fim do nível qualquer jogador pode avançar, repetir ou voltar (já ninguém fica preso em \"à espera do host\").",
+		"Online: se os dois PCs tiverem versões diferentes, o jogo diz quem tem de atualizar.",
+		"O número da mesa aparece por cima do balão do pedido, como nos talões.",
+		"Os bonecos andam mais suaves, sobretudo com o FPS acima de 60.",
+	]],
 	["0.6.2", [
 		"Quando um grupo se vai embora sem comer, já dá para levantar o prato que ficou na mesa e deitá-lo fora.",
 		"O nome de cada jogador aparece por cima do boneco.",

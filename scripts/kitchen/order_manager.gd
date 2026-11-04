@@ -43,6 +43,8 @@ var patience_scale := 1.0
 var points_scale := 1.0
 ## Grupos maiores (níveis de festa e almoços de família).
 var big_groups := false
+## Grupos ao mesmo tempo no salão (mais mesas, mais grupos).
+var max_customers := MAX_CUSTOMERS
 ## Pontos pagos por pratos entregues a mesas que se foram embora antes do fim.
 var partial_paid := 0
 var _spawn := SPAWN_EVERY - FIRST_SPAWN
@@ -52,7 +54,7 @@ var _next_id := 1
 func _process(delta: float) -> void:
 	if active and not scripted and not closed:
 		_spawn += delta
-		if _spawn >= spawn_every and customers.size() < MAX_CUSTOMERS:
+		if _spawn >= spawn_every and customers.size() < max_customers:
 			if spawn_group(_random_order()):
 				_spawn = 0.0
 	for customer in customers.duplicate():
@@ -80,8 +82,16 @@ func _random_order() -> Array[Dictionary]:
 		if roll <= 0.0:
 			break
 		size += 1
+	size = mini(size, 4)
+	# Com mesas de 6, 8 ou 10, às vezes chega uma festa que só cabe nelas.
+	var biggest := 0
+	if kitchen:
+		for t in kitchen.tables():
+			biggest = maxi(biggest, t.capacity())
+	if biggest > 4 and randf() < (0.3 if big_groups else 0.18):
+		size = randi_range(5, biggest)
 	var order: Array[Dictionary] = []
-	for i in mini(size, 4):
+	for i in size:
 		order.append(menu.pick_random())
 	return order
 

@@ -12,6 +12,8 @@ const GAP := 18.0
 const TILE_SIZE := Vector2(200, 78)
 const TILE_GAP := 12.0
 const TILES_Y := 336.0
+## Níveis à vista de cada vez na fila (os outros aparecem ao andar para o lado).
+const VISIBLE_TILES := 5
 const INFO_RECT := Rect2(116, 426, 1048, 92)
 
 var _index := 0
@@ -255,9 +257,21 @@ func _input(event: InputEvent) -> void:
 					_stage += 1
 			_after_mouse()
 			return
-	var tiles_x := (1280.0 - (Levels.STAGES * TILE_SIZE.x + (Levels.STAGES - 1) * TILE_GAP)) / 2.0
-	for k in Levels.STAGES:
-		var rect := Rect2(Vector2(tiles_x + k * (TILE_SIZE.x + TILE_GAP), TILES_Y - 6), TILE_SIZE + Vector2(0, 6))
+	var tiles_x := (1280.0 - (VISIBLE_TILES * TILE_SIZE.x + (VISIBLE_TILES - 1) * TILE_GAP)) / 2.0
+	# Setas dos lados: mostram os níveis anteriores ou seguintes.
+	if not wheel and absf(at.y - (TILES_Y + TILE_SIZE.y / 2.0)) < TILE_SIZE.y / 2.0:
+		if at.x < tiles_x - 4 and _window_start() > 0:
+			_row = 1
+			_stage = _window_start() - 1
+			_after_mouse()
+			return
+		if at.x > 1280.0 - tiles_x + 4 and _window_start() + VISIBLE_TILES < Levels.STAGES:
+			_row = 1
+			_stage = _window_start() + VISIBLE_TILES
+			_after_mouse()
+			return
+	for k in range(_window_start(), _window_start() + VISIBLE_TILES):
+		var rect := Rect2(Vector2(tiles_x + (k - _window_start()) * (TILE_SIZE.x + TILE_GAP), TILES_Y - 6), TILE_SIZE + Vector2(0, 6))
 		if rect.has_point(at) and not wheel:
 			var again := _row == 1 and _stage == k
 			_row = 1
@@ -366,17 +380,24 @@ func _draw_cards() -> void:
 func _draw_stages() -> void:
 	var font := UiStyle.FONT
 	var rest: Dictionary = Levels.ALL[_index]
-	var total := Levels.STAGES * TILE_SIZE.x + (Levels.STAGES - 1) * TILE_GAP
+	var total := VISIBLE_TILES * TILE_SIZE.x + (VISIBLE_TILES - 1) * TILE_GAP
 	var start_x := (1280.0 - total) / 2.0
 	var dim := 0.45 if GameState.endless else 1.0
-	for k in Levels.STAGES:
+	var first := _window_start()
+	# Setas quando há mais níveis para os lados.
+	var mid_y := TILES_Y + TILE_SIZE.y / 2.0
+	if first > 0:
+		_draw_arrow(Vector2(start_x - 22, mid_y), -1, dim)
+	if first + VISIBLE_TILES < Levels.STAGES:
+		_draw_arrow(Vector2(1280.0 - start_x + 22, mid_y), 1, dim)
+	for k in range(first, first + VISIBLE_TILES):
 		var st: Dictionary = rest["stages"][k]
 		var open := _unlocked(_index, k)
 		var selected := k == _stage and not GameState.endless
 		var focus := clampf(1.0 - absf(_shown_stage - k), 0.0, 1.0) if not GameState.endless else 0.0
 		var lift := (6.0 * focus if _row == 1 else 2.0 * focus)
 		var shake := sin(_time * 50.0) * 6.0 * _shake if selected else 0.0
-		var rect := Rect2(Vector2(start_x + k * (TILE_SIZE.x + TILE_GAP) + shake, TILES_Y - lift), TILE_SIZE)
+		var rect := Rect2(Vector2(start_x + (k - first) * (TILE_SIZE.x + TILE_GAP) + shake, TILES_Y - lift), TILE_SIZE)
 		if selected:
 			_cards.draw_rect(rect.grow(5), Color(UiStyle.GOLD if _row == 1 else UiStyle.GOLD.darkened(0.35), dim))
 		if open:
@@ -401,6 +422,19 @@ func _draw_stages() -> void:
 		else:
 			_draw_lock(rect.position + Vector2(64, 52), dim)
 			_cards.draw_string(font, rect.position + Vector2(80, 60), "1 estrela no %d" % k, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, ink)
+
+
+## Primeiro nível à vista (mostram-se 5 de cada vez, com o escolhido no meio).
+func _window_start() -> int:
+	return clampi(_stage - VISIBLE_TILES / 2, 0, maxi(0, Levels.STAGES - VISIBLE_TILES))
+
+
+func _draw_arrow(center: Vector2, dir: int, alpha: float) -> void:
+	var bob := sin(_time * 4.0) * 3.0 * dir
+	var c := center + Vector2(bob, 0)
+	var pts := PackedVector2Array([c + Vector2(-8 * dir, -14), c + Vector2(10 * dir, 0), c + Vector2(-8 * dir, 14)])
+	_cards.draw_colored_polygon(pts, Color(UiStyle.GOLD, alpha))
+	_cards.draw_polyline(pts + PackedVector2Array([pts[0]]), Color(UiStyle.INK, alpha), 3.0)
 
 
 func _draw_lock(at: Vector2, alpha: float) -> void:

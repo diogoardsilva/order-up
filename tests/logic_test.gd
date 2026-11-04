@@ -21,7 +21,7 @@ func _ready() -> void:
 	get_tree().quit(0 if _fails == 0 else 1)
 
 
-## Os 25 níveis: caixas chegam para os pratos, há desenho para tudo.
+## Os 50 níveis: caixas chegam para os pratos, há desenho para tudo.
 func _test_levels() -> void:
 	for i in Levels.ALL.size():
 		for k in range(-1, Levels.STAGES):
@@ -127,6 +127,20 @@ func _test_kitchens() -> void:
 					crates.append(st.ingredient)
 			for raw in level["crates"]:
 				_ok(crates.has(raw), "%s/%d: caixa de %s não está na cozinha" % [level["restaurant"], k, raw])
+			# As mesas do nível: quantas, de que tamanho e com cadeiras livres.
+			var plan: Array = Levels.TABLE_PLANS[k]
+			var tables := kitchen.tables()
+			_ok(tables.size() == plan[1].size(), "%s/%d: %d mesas em vez de %d" % [level["restaurant"], k, tables.size(), plan[1].size()])
+			var caps: Array = tables.map(func(t): return t.capacity())
+			var want: Array = plan[1].map(func(t): return t[2] * 2)
+			caps.sort()
+			want.sort()
+			_ok(caps == want, "%s/%d: lugares %s em vez de %s" % [level["restaurant"], k, caps, want])
+			for t in tables:
+				for seat in t.seats:
+					_ok(kitchen.layout[seat.y][seat.x] == ".", "%s/%d: cadeira em cima de algo em %s" % [level["restaurant"], k, seat])
+			_ok(kitchen.register != null, "%s/%d: sem caixa registadora" % [level["restaurant"], k])
+			_ok(kitchen.door_cell() != Vector2i.ZERO, "%s/%d: sem porta" % [level["restaurant"], k])
 			kitchen.free()
 			orders.free()
 

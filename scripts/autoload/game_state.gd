@@ -71,6 +71,10 @@ var sfx_volume := 0.8
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# Interpolação da física só para quem a pede (os chefs): o resto do jogo
+	# mexe-se a cada frame e não precisa.
+	get_tree().physics_interpolation = true
+	get_tree().root.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	for bus in ["Music", "SFX"]:
 		if AudioServer.get_bus_index(bus) == -1:
 			AudioServer.add_bus()
