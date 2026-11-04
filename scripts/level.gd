@@ -102,6 +102,7 @@ func _ready() -> void:
 		var chef := Chef.new()
 		chef.source = p["source"]
 		chef.color = p["color"]
+		chef.player_name = str(p.get("name", ""))
 		chef.slot = p["slot"]
 		chef.look = PlayerRegistry.look_of(p)
 		chef.outfit = p.get("role", 0)
@@ -717,6 +718,8 @@ func _context_actions(chef: Chef, st: Station) -> Array:
 				out.append([&"pick", "Anotar pedido"])
 			elif t.has_dirty():
 				out.append([&"pick", "Levantar pratos"])
+			elif t.has_leftovers():
+				out.append([&"pick", "Levantar o prato"])
 		elif st is RegisterStation:
 			if _orders.front_of_queue():
 				out.append([&"use", "Cobrar"])

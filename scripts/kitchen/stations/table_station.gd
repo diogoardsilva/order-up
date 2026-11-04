@@ -25,6 +25,11 @@ func has_dirty() -> bool:
 	return customer == null and items.any(func(i: Item): return i.dirty)
 
 
+## O grupo foi-se embora sem comer tudo: ficou comida (ou bebida) na mesa.
+func has_leftovers() -> bool:
+	return customer == null and not items.is_empty() and not has_dirty()
+
+
 func interact(held: Item) -> Item:
 	if held == null:
 		# Só se levantam os pratos sujos depois de o grupo sair (todos de uma vez, até 4).
@@ -33,6 +38,9 @@ func interact(held: Item) -> Item:
 			while has_dirty() and taken.can_stack(items.back()):
 				taken.stack += items.pop_back().stack
 			return taken
+		# Comida que ficou na mesa quando o grupo desistiu: pega-se (para o lixo).
+		if has_leftovers():
+			return items.pop_back()
 		return null
 	# Com pratos sujos na mão, levam-se também os desta mesa.
 	if has_dirty() and held.can_stack(items.back()):

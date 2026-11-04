@@ -38,6 +38,8 @@ var net_target := Vector2.ZERO
 ## Boneco (CharacterLook) e roupa (a função: 0 Livre ... 5 Barman).
 var look: Dictionary = CharacterLook.preset(0)
 var outfit := 0
+## Nome do jogador, por cima da cabeça (vazio nos ajudantes).
+var player_name := ""
 
 var _dash_left := 0.0
 var _dash_cooldown := 0.0
@@ -228,6 +230,11 @@ func _draw() -> void:
 	# Marcador do jogador: um triângulo na cor dele.
 	var tip := Vector2(0, top_left.y - 3 + sin(Time.get_ticks_msec() / 250.0) * 1.0).round()
 	draw_colored_polygon(PackedVector2Array([tip, tip + Vector2(-3, -4), tip + Vector2(3, -4)]), color)
+	# O nome do jogador, para se saber quem é quem.
+	if player_name != "":
+		var at := Vector2(-40, tip.y - 6)
+		draw_string_outline(font, at, player_name, HORIZONTAL_ALIGNMENT_CENTER, 80, 10, 3, Color(0.1, 0.05, 0.05, 0.85))
+		draw_string(font, at, player_name, HORIZONTAL_ALIGNMENT_CENTER, 80, 10, color.lightened(0.35))
 	if emote_left > 0.0:
 		var pop := 1.0 + maxf(0.0, emote_left - EMOTE_TIME + 0.15) * 4.0
 		draw_set_transform(Vector2(0, top_left.y - 10), 0.0, Vector2(pop, pop))

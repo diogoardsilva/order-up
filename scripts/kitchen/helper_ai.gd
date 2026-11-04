@@ -500,11 +500,14 @@ func _step_for(need: String, plate_station: Station) -> Dictionary:
 			return {}
 		_job["carry"] = true
 		return _go(plate_station.cell)
-	if pot.cook_state == Item.Cook.COOKING:
-		return {}
-	var left: Array = cook["in"].duplicate()
+	# Com dois pedidos do mesmo, faz logo uma dose dupla (o dobro dos ingredientes).
+	var left: Array = []
+	for k in _portions_for(need):
+		left.append_array(cook["in"])
 	for id in pot.contents:
 		left.erase(id)
+	if pot.cook_state == Item.Cook.COOKING and (left.is_empty() or pot.portions >= Item.MAX_PORTIONS):
+		return {}
 	for id in left:
 		var task := _ingredient_to(id, stove)
 		if not task.is_empty():
@@ -529,6 +532,9 @@ func _stove_for(product: String, claim: bool) -> StoveStation:
 	var fits := func(s) -> bool:
 		if s.item.cook_state == Item.Cook.EMPTY:
 			return true
+		# Sobrou uma dose deste produto (ou está a cozer): serve já para este prato.
+		if s.item.cook_state in [Item.Cook.READY, Item.Cook.COOKING] and s.item.product == product:
+			return true
 		if s.item.cook_state != Item.Cook.FILLING:
 			return false
 		var left := wanted.duplicate()
@@ -543,6 +549,20 @@ func _stove_for(product: String, claim: bool) -> StoveStation:
 	stoves[product] = free[0].cell
 	_job["stoves"] = stoves
 	return free[0]
+
+
+## Quantas doses fazer de uma vez: duas se há pelo menos dois pedidos que
+## precisam deste produto (e ainda nenhuma panela a fazê-lo).
+func _portions_for(product: String) -> int:
+	var n := 0
+	for o in orders.orders:
+		if (o["recipe"].get("needs", []) as Array).has(product):
+			n += 1
+	for st in kitchen.stations.values():
+		if st is StoveStation and st.item and st.item.product == product and st.item.cook_state in [Item.Cook.READY, Item.Cook.COOKING] \
+				and not _job.get("stoves", {}).values().has(st.cell):
+			n -= st.item.portions
+	return 2 if n >= 2 else 1
 
 
 ## O que tem na mão é um ingrediente (cru ou cortado) de algo que falta?

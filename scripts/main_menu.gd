@@ -14,6 +14,7 @@ const DEMO_SERVE_AFTER := 3.5
 ## estes scripts num pacote novo, e as classes novas só se registam ao arrancar.
 const BOOT_SCREEN := preload("res://scripts/boot_screen.gd")
 const WELCOME_FLOW := preload("res://scripts/welcome_flow.gd")
+const CHANGELOG_MENU := preload("res://scripts/changelog_menu.gd")
 var _time := 0.0
 var _kitchen: Kitchen
 var _orders: OrderManager
@@ -92,7 +93,12 @@ func _ready() -> void:
 	_update_button = UiStyle.button("Reiniciar e atualizar", func(): Updater.restart_now(), 360)
 	_update_button.hide()
 	_main_box.add_child(_update_button)
-	_main_box.add_child(UiStyle.button("Sair", func(): get_tree().quit(), 360))
+	# Novidades e Sair lado a lado.
+	var last_row := HBoxContainer.new()
+	last_row.add_theme_constant_override("separation", 10)
+	last_row.add_child(UiStyle.button("Novidades", _show_changelog, 175))
+	last_row.add_child(UiStyle.button("Sair", func(): get_tree().quit(), 175))
+	_main_box.add_child(last_row)
 	if _continue_button:
 		_first_button = _continue_button
 
@@ -328,6 +334,21 @@ func _show_graphics() -> void:
 	_graphics_box.show()
 	_graphics_box.focus_first()
 	_pop(_graphics_box)
+
+
+func _show_changelog() -> void:
+	Sfx.play("ui_confirm")
+	_column.hide()
+	_sign.hide()
+	var menu: Control = CHANGELOG_MENU.new()
+	menu.closed.connect(func():
+		menu.queue_free()
+		_column.show()
+		_sign.show()
+		_first_button.grab_focus())
+	add_child(menu)
+	menu.focus_first()
+	_pop(menu)
 
 
 func _show_profiles() -> void:
