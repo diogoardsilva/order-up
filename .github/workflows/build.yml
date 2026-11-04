@@ -63,6 +63,7 @@ jobs:
           fail=0
           for scene in main_menu lobby level_select level; do
             timeout 120 $godot --headless --quit-after 400 res://scenes/$scene.tscn > run_$scene.log 2>&1 || true
+            echo "--- $scene ($(wc -l < run_$scene.log) linhas) ---"; grep -iE "error|warning" run_$scene.log | head -20 || true
             if grep -E "SCRIPT ERROR|Parse Error|Invalid call|Invalid access|Invalid assignment|Cannot call|Failed to load script" run_$scene.log; then
               echo "::error::Erros ao abrir $scene"
               fail=1
