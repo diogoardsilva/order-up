@@ -127,7 +127,7 @@ func _draw_card() -> void:
 		ci.draw_set_transform(at, 0.0, Vector2(s, s))
 		CharacterLook.draw(ci, look, [3, 0, 1][i], 1 + int(_time / 0.25 + i) % 2, 0, Vector2.ZERO)
 		ci.draw_set_transform(Vector2.ZERO)
-	var lines: Array[String] = [
+	var lines: Array = [
 		"Cria uma conta (ou entra na tua) para guardar as estrelas,",
 		"as conquistas e o teu boneco online, em qualquer PC.",
 		"Depois escolhe o aspeto do teu cozinheiro.",
