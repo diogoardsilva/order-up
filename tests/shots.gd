@@ -12,6 +12,8 @@ func _ready() -> void:
 		_dir = OS.get_user_data_dir().path_join("shots")
 	DirAccess.make_dir_recursive_absolute(_dir)
 	GameState.tutorial_done = true
+	GameState.booted = true
+	GameState.welcome_done = true
 	# A raiz ainda está a montar os filhos: espera um frame antes de abrir ecrãs.
 	_run.call_deferred()
 
@@ -92,5 +94,27 @@ func _run() -> void:
 	level._time_left = 0.0
 	await _wait(4.0)
 	await _shot("07-fim-do-nivel")
+	level.queue_free()
+
+	# Ecrã de atualizações e boas-vindas da primeira vez.
+	get_tree().paused = false
+	var menu := _open("res://scenes/main_menu.tscn")
+	var boot: Node = load("res://scripts/boot_screen.gd").new()
+	menu.add_child(boot)
+	await _wait(0.6)
+	boot.preview("downloading", 0.62)
+	await _wait(0.2)
+	await _shot("08-atualizar")
+	boot.queue_free()
+	var welcome: Node = load("res://scripts/welcome_flow.gd").new()
+	menu.add_child(welcome)
+	await _wait(1.0)
+	await _shot("09-boas-vindas")
+	welcome._open_account()
+	await _wait(0.6)
+	await _shot("10-conta")
+	welcome._friends.closed.emit()
+	await _wait(0.6)
+	await _shot("11-boneco")
 	print("SHOTS DONE")
 	get_tree().quit()
