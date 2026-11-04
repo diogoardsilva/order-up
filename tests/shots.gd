@@ -1,0 +1,94 @@
+extends Node
+## Capturas para mostrar o progresso (corre na CI com xvfb):
+## godot res://tests/shots.tscn -> grava PNGs em user://shots ou em $SHOTS_DIR.
+
+var _dir := ""
+
+
+func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	_dir = OS.get_environment("SHOTS_DIR")
+	if _dir == "":
+		_dir = OS.get_user_data_dir().path_join("shots")
+	DirAccess.make_dir_recursive_absolute(_dir)
+	GameState.tutorial_done = true
+	_run()
+
+
+func _wait(secs: float) -> void:
+	await get_tree().create_timer(secs, true).timeout
+
+
+func _shot(name: String) -> void:
+	await RenderingServer.frame_post_draw
+	var img := get_viewport().get_texture().get_image()
+	img.save_png(_dir.path_join(name + ".png"))
+	print("SHOT ", name)
+
+
+func _open(path: String) -> Node:
+	var scene: Node = load(path).instantiate()
+	get_tree().root.add_child(scene)
+	return scene
+
+
+func _run() -> void:
+	# Um nível já com estrelas, para se ver a fila de níveis aberta.
+	GameState.save_stars(Levels.stage_id(1, 0), 3)
+	GameState.save_stars(Levels.stage_id(1, 1), 2)
+	var s := _open("res://scenes/main_menu.tscn")
+	await _wait(3.0)
+	await _shot("01-menu")
+	s.queue_free()
+
+	var keyboards := DeviceManager.all_sources().filter(func(x): return x is KeyboardSource)
+	for k in keyboards:
+		PlayerRegistry.join(k)
+	s = _open("res://scenes/lobby.tscn")
+	await _wait(1.5)
+	await _shot("02-lobby")
+	s.queue_free()
+
+	GameState.level = 1
+	GameState.stage = 2
+	GameState.endless = false
+	s = _open("res://scenes/level_select.tscn")
+	await _wait(1.5)
+	await _shot("03-escolher-nivel")
+	s.queue_free()
+
+	GameState.level = 2
+	GameState.stage = 4
+	GameState.mode = GameState.Mode.PLAY
+	var level: Node = _open("res://scenes/level.tscn")
+	await _wait(9.0)
+	await _shot("04-sushi-hanami")
+	# Doses duplas e molhos de ingredientes.
+	var kitchen: Kitchen = level._kitchen
+	var stoves := kitchen.stations.values().filter(func(st): return st is StoveStation)
+	var pot: Item = stoves[0].item if stoves[0].item else Item.cookware("pot")
+	pot.empty_cookware()
+	for id in ["noodles", "egg", "noodles", "egg"]:
+		pot.cook_add(id)
+	pot.cook_tick(100.0)
+	stoves[0].item = pot
+	var boards := kitchen.stations.values().filter(func(st): return st is BoardStation)
+	var shrimp := Item.ingredient("shrimp")
+	shrimp.count = 4
+	boards[0].item = shrimp
+	if not kitchen.chefs.is_empty():
+		var salmon := Item.ingredient("salmon")
+		salmon.count = 2
+		kitchen.chefs[0].held = salmon
+	await _wait(0.5)
+	await _shot("05-doses-e-molhos")
+	level._pause_menu.open()
+	await _wait(0.8)
+	await _shot("06-pausa")
+	level._pause_menu.close()
+	level._orders.score = 320
+	level._time_left = 0.0
+	await _wait(4.0)
+	await _shot("07-fim-do-nivel")
+	print("SHOTS DONE")
+	get_tree().quit()
