@@ -94,7 +94,7 @@ const INGREDIENT_NAMES := {
 	"tomato": "Tomate", "lettuce": "Alface", "steak": "Bife", "egg": "Ovos", "potato": "Batatas",
 	"cod": "Bacalhau", "kale": "Couve", "rice": "Arroz", "salmon": "Salmão", "nori": "Alga",
 	"cucumber": "Pepino", "bun": "Pão", "patty": "Carne", "cheese": "Queijo", "pasta": "Esparguete",
-	"dough": "Massa", "bread": "Pão", "mushroom": "Cogumelos", "shrimp": "Camarão", "noodles": "Massa ramen",
+	"dough": "Massa", "bread": "Pão", "mushroom": "Cogumelos", "shrimp": "Camarão", "noodles": "Noodles",
 	"sausage": "Salsichas", "onion": "Cebolas",
 }
 

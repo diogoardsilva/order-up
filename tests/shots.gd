@@ -12,7 +12,8 @@ func _ready() -> void:
 		_dir = OS.get_user_data_dir().path_join("shots")
 	DirAccess.make_dir_recursive_absolute(_dir)
 	GameState.tutorial_done = true
-	_run()
+	# A raiz ainda está a montar os filhos: espera um frame antes de abrir ecrãs.
+	_run.call_deferred()
 
 
 func _wait(secs: float) -> void:
@@ -33,6 +34,7 @@ func _open(path: String) -> Node:
 
 
 func _run() -> void:
+	await get_tree().process_frame
 	# Um nível já com estrelas, para se ver a fila de níveis aberta.
 	GameState.save_stars(Levels.stage_id(1, 0), 3)
 	GameState.save_stars(Levels.stage_id(1, 1), 2)
