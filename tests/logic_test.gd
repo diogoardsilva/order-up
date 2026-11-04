@@ -16,6 +16,7 @@ func _ready() -> void:
 	_test_double_portions()
 	_test_stacks()
 	_test_kitchens()
+	_test_leftovers()
 	print("TESTS OK" if _fails == 0 else "TESTS FAILED (%d)" % _fails)
 	get_tree().quit(0 if _fails == 0 else 1)
 
@@ -128,3 +129,21 @@ func _test_kitchens() -> void:
 				_ok(crates.has(raw), "%s/%d: caixa de %s não está na cozinha" % [level["restaurant"], k, raw])
 			kitchen.free()
 			orders.free()
+
+
+## Grupo que desiste com comida na mesa: o prato levanta-se e vai para o lixo.
+func _test_leftovers() -> void:
+	var table := TableStation.new()
+	var plate := Item.plate()
+	plate.contents.append("tomato_chopped")
+	table.items.append(plate)
+	_ok(table.has_leftovers(), "mesa sem grupo com comida tem restos")
+	_ok(not table.is_free(), "mesa com restos não está livre")
+	var taken := table.interact(null)
+	_ok(taken == plate, "levanta o prato com comida")
+	_ok(table.is_free(), "mesa fica livre")
+	var trash := TrashStation.new()
+	var after := trash.interact(taken)
+	_ok(after != null and after.contents.is_empty(), "o lixo esvazia o prato")
+	table.free()
+	trash.free()
