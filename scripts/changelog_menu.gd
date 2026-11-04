@@ -10,6 +10,7 @@ const ENTRIES: Array = [
 		"Online: no fim do nível qualquer jogador pode avançar, repetir ou voltar (já ninguém fica preso em \"à espera do host\").",
 		"Online: se os dois PCs tiverem versões diferentes, o jogo diz quem tem de atualizar em vez de ficar preso.",
 		"O número da mesa aparece por cima do balão do pedido, como nos talões, e já não na mesa.",
+		"Os bonecos andam mais suaves, sobretudo com o FPS acima de 60.",
 	]],
 	["0.6.2", [
 		"Quando um grupo se vai embora sem comer, já dá para levantar o prato que ficou na mesa e deitá-lo fora.",
